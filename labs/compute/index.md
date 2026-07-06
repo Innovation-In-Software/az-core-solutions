@@ -1,0 +1,300 @@
+# One App, Two Ways – Deploying with IaaS and PaaS
+
+## The Scenario
+
+The groundwork at **Cascade Outfitters** is done: you know your way around, and the project has a home. Now the actual work arrives. The catalog team has a simple product page ready, and your lead wants a recommendation backed by evidence, not slideware:
+
+> "Deploy the catalog page twice — once on a virtual machine, once on App Service. Same page, two service models. Then tell me what we'd actually be signing up to manage in each case. The team is three people; every hour spent patching servers is an hour not spent on the catalog."
+
+This lab is that bake-off. You will build a working web server from a raw virtual machine (IaaS), then deploy the identical content to Azure App Service (PaaS) — and feel the difference in your hands: what you had to do, what you had to know, and what you would own at 2 a.m. when something breaks.
+
+By the end, the IaaS/PaaS/SaaS spectrum from the slides stops being a diagram and becomes a decision you can defend.
+
+> **Cost note:** This lab creates resources that bill — a small VM costs a few cents per hour. The App Service tier we use is free. Everything is deleted in the cleanup step, and skipping cleanup is the only way this lab costs more than pocket change. Do not skip cleanup.
+
+### Prerequisites
+
+- Completion of the previous labs, or comfort with Cloud Shell and resource groups
+- An Azure account (the free account is enough)
+
+---
+
+## Step 1 – Create the Resource Group for the Bake-Off
+
+In Cloud Shell (Bash), run (use your initials):
+
+```bash
+az group create \
+  --name rg-compute-<yourinitials> \
+  --location eastus \
+  --tags project=catalog environment=dev owner=<yourinitials>
+```
+
+**Why one group for both deployments?** Both the VM and the App Service exist for the same purpose — this comparison — and they will be deleted together when it ends. Resources that share a lifecycle share a resource group; that way cleanup is one command instead of a scavenger hunt. The tags are now habit, not homework.
+
+---
+
+## Step 2 – Write the Server's Setup Instructions Before the Server Exists
+
+Create a file that describes what the VM should do to itself on first boot. In Cloud Shell:
+
+```bash
+mkdir -p ~/compute-lab && cd ~/compute-lab
+
+cat > cloud-init.yaml << 'EOF'
+#cloud-config
+package_update: true
+packages:
+  - nginx
+write_files:
+  - path: /var/www/html/index.html
+    content: |
+      <html>
+        <head><title>Cascade Outfitters Catalog</title></head>
+        <body style="font-family: sans-serif; margin: 3em;">
+          <h1>Cascade Outfitters – Product Catalog</h1>
+          <p>Served from an <strong>Azure Virtual Machine</strong> (IaaS).</p>
+          <p>Someone on our team patches this OS. That someone is us.</p>
+        </body>
+      </html>
+runcmd:
+  - systemctl enable --now nginx
+EOF
+```
+
+**What is cloud-init?** A standard first-boot configuration format that most Linux cloud images understand. When Azure creates the VM, it hands this file to the OS, which then updates its package list, installs nginx, writes your web page, and starts the service — all before you ever log in.
+
+**Why script the setup instead of logging in and typing?** Two reasons, and both matter beyond this lab. First, **repeatability**: this file produces the same server every time, with no missed step and no "it works on the one I set up by hand." Second, it demonstrates where IaaS responsibility begins — notice that *you* are the one specifying packages, web content, and service startup. Azure gives you a clean OS and walks away. Everything above the hypervisor is your job, and this file is you doing that job. Keep that thought; it is the entire point of the comparison to come.
+
+---
+
+## Step 3 – Create the Virtual Machine
+
+```bash
+az vm create \
+  --resource-group rg-compute-<yourinitials> \
+  --name vm-catalog \
+  --image Ubuntu2204 \
+  --size Standard_B1s \
+  --admin-username azureuser \
+  --generate-ssh-keys \
+  --custom-data cloud-init.yaml
+```
+
+This takes two to four minutes. While it runs, read the flags — every one is a decision you just made:
+
+| Flag | The decision | Why it matters |
+|---|---|---|
+| `--image Ubuntu2204` | Which operating system | In IaaS, the OS is yours: yours to choose, yours to patch, yours to upgrade when it goes end-of-life |
+| `--size Standard_B1s` | How much CPU and memory | B-series is a small, inexpensive "burstable" size — right for a lab, wrong for a busy production site. Sizing is your job in IaaS |
+| `--admin-username` / `--generate-ssh-keys` | How you log in | Keys are generated if you have none, and the public key is placed on the VM. Password logins are weaker; keys are the norm |
+| `--custom-data cloud-init.yaml` | What the server becomes | Your Step 2 file, injected at first boot |
+
+> **Note:** If the command reports the size is unavailable or quota is exceeded in your region, delete the resource group (`az group delete --name rg-compute-<yourinitials> --yes`), recreate it in another region such as `westus2`, and rerun from Step 1 — a failed VM create often leaves partial networking resources behind that will conflict with a retry in a different region. Or ask your instructor.
+
+**What did Azure create besides the VM?** When it finishes, run `az resource list --resource-group rg-compute-<yourinitials> --output table`. You will see roughly six resources: the VM, a disk, a network interface, a public IP address, a network security group — and a **virtual network** the CLI quietly created to put it all in. A "virtual machine" is really a small bundle: compute, storage, and networking are separate resources wired together. Today the CLI chose sensible defaults for that wiring; the networking lab takes direct control of it, starting with that quietly-created network.
+
+---
+
+## Step 4 – Open the Firewall and Visit Your Server
+
+By default, nothing can reach the VM from the internet on port 80. Open it:
+
+```bash
+az vm open-port --resource-group rg-compute-<yourinitials> --name vm-catalog --port 80
+```
+
+Get the public IP address:
+
+```bash
+az vm show --resource-group rg-compute-<yourinitials> --name vm-catalog \
+  --show-details --query publicIps --output tsv
+```
+
+Now test it — either paste the IP into your browser, or from Cloud Shell:
+
+```bash
+curl http://<the-ip-address>
+```
+
+You should see the catalog page HTML, served by *your* nginx on *your* VM.
+
+> **If the connection is refused:** cloud-init runs *after* the VM boots, and the package update plus nginx install can take an extra minute or two beyond `vm create` returning. Wait a moment and retry — watching a server finish assembling itself is part of the IaaS experience.
+
+**Why was port 80 closed to begin with?** Azure's default posture for a new VM is deny-by-default for inbound traffic — only what you explicitly allow gets in. That is the right default: the internet continuously scans every public IP address, and an accidentally exposed service is one of the most common cloud security incidents. `az vm open-port` added an allow rule for port 80 to the VM's network security group. Notice this is *your* security decision to make — in IaaS, the responsibility line puts network configuration on your side.
+
+> **Checkpoint:** The catalog page loads from the VM's public IP.
+
+---
+
+## Step 5 – Log In and Meet Everything You Now Own
+
+SSH into the VM from Cloud Shell:
+
+```bash
+ssh azureuser@<the-ip-address>
+```
+
+(Answer `yes` to the fingerprint prompt.) Once inside, look around:
+
+```bash
+systemctl status nginx --no-pager     # the web server you now operate
+apt list --upgradable 2>/dev/null | head    # patches waiting for a decision
+df -h /                               # a disk that can fill up
+exit
+```
+
+**Why poke around a working server?** Because this is the honest face of IaaS. That `apt list --upgradable` output is a to-do list with your name on it — every one of those packages, the OS itself, nginx, its configuration, TLS certificates, log rotation, disk space, and backups are the customer's side of the shared responsibility model. None of it is hard. All of it is *recurring*. For a three-person team, the question is never "can we run a VM?" — it is "is running a VM the best use of our hours?" Hold that question through the next two steps.
+
+**When is all this ownership worth it?** When you *need* what it buys: full OS control, custom system software, unusual runtimes, lift-and-shift of an app that expects a server. IaaS is not the wrong choice — it is the maximum-control, maximum-responsibility choice.
+
+---
+
+## Step 6 – Now the PaaS Way: Prepare the Same Content
+
+Back in Cloud Shell, create the same page as a plain folder of content:
+
+```bash
+mkdir -p ~/compute-lab/catalog-site && cd ~/compute-lab/catalog-site
+
+cat > index.html << 'EOF'
+<html>
+  <head><title>Cascade Outfitters Catalog</title></head>
+  <body style="font-family: sans-serif; margin: 3em;">
+    <h1>Cascade Outfitters – Product Catalog</h1>
+    <p>Served from <strong>Azure App Service</strong> (PaaS).</p>
+    <p>Nobody on our team patches this OS. That is the point.</p>
+  </body>
+</html>
+EOF
+```
+
+**Notice what is missing.** There is no cloud-init file. No package list. No nginx. No systemctl. Just the content itself. In PaaS, the platform brings its own web server, its own OS, and its own patching schedule — you bring the application. The next command will make that concrete.
+
+---
+
+## Step 7 – Deploy to App Service with One Command
+
+App Service names become part of a public URL, so yours must be globally unique — include your initials and a few digits:
+
+```bash
+az webapp up \
+  --name catalog-<yourinitials>-<3digits> \
+  --resource-group rg-compute-<yourinitials> \
+  --plan plan-catalog-<yourinitials> \
+  --location eastus \
+  --sku F1 \
+  --html
+```
+
+In about a minute, the output prints a URL like `http://catalog-js-042.azurewebsites.net`. Open it in your browser.
+
+**What just happened?** One command created an **App Service plan** (the pool of compute your apps run on), created the **web app**, zipped your folder, uploaded it, and served it — with a real DNS name and HTTPS available out of the box. Compare that to Steps 2 through 4.
+
+**Why is there still a "plan" with a size (`--sku F1`)?** Because PaaS abstracts the *operating system*, not the laws of physics. Your app still runs on compute somewhere, and the plan is how you choose and pay for it. `F1` is the free tier — fine for this lab, limited for real use. The difference from the VM is *what the size decision includes*: with the plan you choose capacity, but the OS, web server, patching, and runtime upkeep stay on Microsoft's side of the line.
+
+**What did you give up?** Honesty matters in a bake-off. You cannot SSH into an F1 App Service and install a system package. You cannot run arbitrary daemons or pick the kernel. If the catalog app someday needs an exotic native library or a custom network stack, PaaS may refuse — and that is exactly when IaaS earns its keep. Control and convenience trade off; that *is* the service-model spectrum.
+
+> **Checkpoint:** Both pages are live — one at the VM's IP address, one at the `azurewebsites.net` URL — and each page tells you which model served it.
+
+---
+
+## Step 8 – Compare What You Actually Did
+
+Look back at your terminal history and fill in the scorecard your lead asked for:
+
+| | VM (IaaS) | App Service (PaaS) |
+|---|---|---|
+| Steps to get to a working page | Write cloud-init, create VM, open port, find IP | One `az webapp up` |
+| Who chose and patches the OS | **You** | Microsoft |
+| Who operates the web server (nginx/IIS) | **You** | Microsoft |
+| Who configures inbound network access | **You** (the port was closed until you opened it) | Platform (HTTP/HTTPS just work) |
+| DNS name and TLS | Yours to arrange | Included (`*.azurewebsites.net`, HTTPS built in) |
+| Can install anything, control everything | **Yes** | No — platform constraints apply |
+| What you deploy | A whole configured machine | Just the application content |
+| Recurring operational load | Patching, upgrades, disk, backups, hardening | Your app and its code |
+
+**So what do you tell your lead?** For a three-person team shipping a standard web app, PaaS wins: the entire row of recurring server chores disappears, and the hours go to the catalog. The VM path is the right answer when the workload demands OS-level control or is being lifted from a datacenter as-is. The model is a choice about *where to spend responsibility*, not about which technology is better.
+
+---
+
+## Step 9 – Place the Rest of the Compute Menu
+
+You deployed the two ends of the everyday spectrum, but the Azure compute menu is longer, and your lead will hear all of these names in vendor meetings. Every one of them is a different answer to the same two questions your scorecard just answered: *how much control do you need, and what are you staffed to operate?*
+
+| Service | What it is | Reach for it when |
+|---|---|---|
+| **Virtual Machines** | The IaaS you just built | You need OS control, custom system software, or a lift-and-shift |
+| **VM Scale Sets** | A fleet of identical VMs that grows and shrinks automatically | Your VM workload needs to handle variable load — this is the *elasticity* from the slides applied to IaaS. Your single `vm-web` handled one visitor fine; a scale set is how the same design survives a holiday sale |
+| **Azure Virtual Desktop** | Full Windows desktops delivered from Azure | Users need a managed desktop from anywhere — remote work, contractors, secure workstations. It is IaaS solving an end-user problem, not an app-hosting one |
+| **App Service** | The PaaS you just used | Standard web apps and APIs — the default choice for teams like the catalog team |
+| **Azure Functions** | Individual pieces of code that run when an event fires, billed per execution | Glue code and background jobs: "when an order lands in the queue, resize the product image." No app is running — or billing — between events. This is *serverless*: the spectrum's far end, one step before SaaS |
+| **Container Instances (ACI)** | Run a single container, no cluster, per-second billing | A quick job or task that ships as a container |
+| **Container Apps** | Containers with scaling and HTTPS handled for you | Containerized apps and microservices without cluster management — roughly "App Service for containers" |
+| **Kubernetes Service (AKS)** | A managed Kubernetes cluster you operate | Many containers, complex orchestration needs, and — critically — engineers dedicated to running the platform |
+
+**Why do containers get three separate services?** Because a container answers a packaging question — "how do I ship my app with its dependencies so it runs the same everywhere?" — but not an operations question. ACI, Container Apps, and AKS are the same trade you spent this lab measuring, replayed for containers: minimum effort, managed middle, maximum control. If you can defend your VM-versus-App-Service recommendation, you can defend an AKS-versus-Container-Apps one with the same reasoning.
+
+**The honest summary for a three-person team:** App Service for the catalog site, Functions for its background jobs, and nobody touches AKS until there is a platform team to feed it. That sentence — matching the service to both the workload *and* the staffing — is the skill this module is actually teaching.
+
+---
+
+## Step 10 – Clean Up (Not Optional Today)
+
+This is the first lab where skipping cleanup costs real money — the VM bills every hour it exists, page or no page. Everything lives in one resource group, so one command ends it:
+
+```bash
+az group delete --name rg-compute-<yourinitials> --yes --no-wait
+```
+
+Verify it is going:
+
+```bash
+az group list --output table
+```
+
+**Why does deleting the group beat deleting the VM?** Remember Step 3: the "VM" was actually five resources. Deleting only the VM would leave the disk, the public IP, and the rest behind — some of which keep billing quietly. Because everything from this lab shares one resource group, the group delete guarantees nothing is orphaned. This is the lifecycle-container idea paying rent: cleanup was designed in back at Step 1, not improvised at the end.
+
+> **Checkpoint:** `rg-compute-<yourinitials>` no longer appears in the list (deletion may take a few minutes to finish).
+
+---
+
+## Concepts Summary
+
+| Concept | What you saw |
+|---|---|
+| **IaaS (Azure VM)** | Full control: you chose the OS, installed the server, opened the port — and inherited the patching to-do list |
+| **cloud-init / custom data** | First-boot automation; repeatable server setup instead of hand-typed steps |
+| **A VM is a bundle** | Compute, disk, NIC, public IP, and NSG are separate resources wired together |
+| **Deny-by-default networking** | Port 80 was closed until you explicitly opened it — inbound exposure is your decision in IaaS |
+| **PaaS (App Service)** | You brought content; the platform brought OS, web server, DNS, and TLS |
+| **App Service plan** | PaaS still runs on compute you choose and pay for — it abstracts the OS, not capacity |
+| **The trade** | Control and convenience move in opposite directions along the IaaS→PaaS spectrum |
+| **The full compute menu** | VMs, Scale Sets, Virtual Desktop, App Service, Functions, ACI, Container Apps, AKS — the same control-vs-convenience decision at eight price points |
+| **Serverless (Functions)** | Code runs per event and bills per execution — the far end of the spectrum |
+| **Lifecycle cleanup** | One resource group per purpose makes teardown one command with nothing orphaned |
+
+---
+
+## Reflection
+
+Answer for yourself or discuss with a partner:
+
+1. The same page needed a five-flag `vm create` plus a cloud-init file on IaaS, and one `webapp up` on PaaS. Where did all that work *go* — who is doing it now?
+2. Name a workload for which the VM would have been the right answer despite the extra responsibility.
+3. On the shared responsibility diagram from the slides, put a finger on the line for your VM deployment, then for your App Service deployment. Which rows moved?
+4. Your VM's public IP responded on port 80 but nothing else. Why is that the correct default, and who chose to open 80?
+
+---
+
+## Optional Challenge
+
+Redeploy the App Service page with a visible change: edit `index.html` (add a product list), then run the same `az webapp up` command again from the `catalog-site` folder and refresh the browser. Time it. Then estimate: what would the same content change have required on the VM path? This gap — seconds versus a login-edit-verify cycle — is why teams that ship frequently gravitate toward PaaS and automation. (If you attempt this, remember cleanup afterward.)
+
+---
+
+## Conclusion
+
+You deployed the identical application twice and lived the difference. On the VM you were the systems administrator: you specified the OS setup, opened the firewall, and logged in to a machine whose patch list now has your name on it. On App Service you were only the developer: content in, URL out, and the operating system became someone else's problem — at the price of someone else's rules.
+
+That trade — control for convenience, moving layer by layer from IaaS through PaaS to SaaS — is the single decision you will make most often in cloud architecture. In the next lab you take back one layer deliberately: the network. You will build the virtual network, subnets, and security rules that production workloads sit inside — and prove with packets who can reach what.
