@@ -10,7 +10,9 @@ This lab is that bake-off. You will build a working web server from a raw virtua
 
 By the end, the IaaS/PaaS/SaaS spectrum from the slides stops being a diagram and becomes a decision you can defend.
 
-> **Cost note:** This lab creates resources that bill — a small VM costs a few cents per hour. The App Service tier we use is free. Everything is deleted in the cleanup step, and skipping cleanup is the only way this lab costs more than pocket change. Do not skip cleanup.
+Then you will go one step further than IaaS and PaaS: a third deployment on **Azure Functions**, the serverless end of the spectrum, so "pay per execution" stops being a slide bullet and becomes a bill you can actually reason about.
+
+> **Cost note:** This lab creates resources that bill — a small VM costs a few cents per hour, and the Functions deployment needs a small storage account that costs a fraction of a cent. The App Service and Functions consumption tiers we use are both free at this scale. Everything is deleted in the cleanup step, and skipping cleanup is the only way this lab costs more than pocket change. Do not skip cleanup.
 
 ### Prerequisites
 
@@ -150,7 +152,37 @@ exit
 
 ---
 
-## Step 6 – Now the PaaS Way: Prepare the Same Content
+## Step 6 – Scale the VM Vertically
+
+The slides drew a line between two kinds of scaling: **vertical** (a bigger machine) and **horizontal** (more machines). You have a machine sitting right here — resize it.
+
+```bash
+az vm deallocate --resource-group rg-compute-<yourinitials> --name vm-catalog
+az vm resize --resource-group rg-compute-<yourinitials> --name vm-catalog --size Standard_B2s
+az vm start --resource-group rg-compute-<yourinitials> --name vm-catalog
+```
+
+Confirm the new size:
+
+```bash
+az vm show --resource-group rg-compute-<yourinitials> --name vm-catalog --query hardwareProfile.vmSize --output tsv
+```
+
+**Why deallocate before resizing?** A running VM occupies specific physical hardware sized to fit its current CPU and memory footprint. Resizing to `Standard_B2s` (double the vCPUs and memory of your `Standard_B1s`) may need to move the VM to different hardware, and Azure will not do that out from under a running OS. `deallocate` releases the VM (and stops billing for compute — only the disk keeps its small storage charge while stopped), `resize` changes the specification ARM stores for it, and `start` boots it again, this time provisioned against the new size. The whole cycle takes a minute or two.
+
+**Why is this "vertical scaling," and why does the slide deck warn it is not the whole answer?** You just made *this one machine* bigger — more CPU, more memory, same single point of failure. It is the fastest way to buy headroom, and it is also a dead end: there is a largest VM size, and even before you reach it, a single bigger machine still goes down for the minutes it takes to resize, as you just watched with `deallocate`/`start`. **Horizontal** scaling — more machines behind a load balancer — is what actually gets you *elasticity* (capacity that grows and shrinks with demand, no restart required) and survives a single machine failing. You will build the horizontal pattern with a load balancer in the networking lab. Today, notice the trade you just made: `az vm resize` is one command, but it bought you a bigger single point of failure, not a more resilient one.
+
+Curl the site once more to confirm nothing else changed:
+
+```bash
+curl http://<the-ip-address>
+```
+
+**Checkpoint:** `hardwareProfile.vmSize` reports `Standard_B2s`, and the catalog page still loads — same server, same content, more room underneath it.
+
+---
+
+## Step 7 – Now the PaaS Way: Prepare the Same Content
 
 Back in Cloud Shell, create the same page as a plain folder of content:
 
@@ -173,7 +205,7 @@ EOF
 
 ---
 
-## Step 7 – Deploy to App Service with One Command
+## Step 8 – Deploy to App Service with One Command
 
 App Service names become part of a public URL, so yours must be globally unique — include your initials and a few digits:
 
@@ -199,47 +231,117 @@ In about a minute, the output prints a URL like `http://catalog-js-042.azurewebs
 
 ---
 
-## Step 8 – Compare What You Actually Did
+## Step 9 – Prepare a Serverless Function
 
-Look back at your terminal history and fill in the scorecard your lead asked for:
+There is one more stop on the spectrum, further than App Service: **Azure Functions**. Instead of a server that runs continuously waiting for requests, a function exists only while it is handling one, and you are billed per execution rather than per hour. Cloud Shell's Bash environment includes the Functions Core Tools (`func`) already installed, so you can build one the same way you would on a laptop.
 
-| | VM (IaaS) | App Service (PaaS) |
-|---|---|---|
-| Steps to get to a working page | Write cloud-init, create VM, open port, find IP | One `az webapp up` |
-| Who chose and patches the OS | **You** | Microsoft |
-| Who operates the web server (nginx/IIS) | **You** | Microsoft |
-| Who configures inbound network access | **You** (the port was closed until you opened it) | Platform (HTTP/HTTPS just work) |
-| DNS name and TLS | Yours to arrange | Included (`*.azurewebsites.net`, HTTPS built in) |
-| Can install anything, control everything | **Yes** | No — platform constraints apply |
-| What you deploy | A whole configured machine | Just the application content |
-| Recurring operational load | Patching, upgrades, disk, backups, hardening | Your app and its code |
+> **First, confirm the tool is present:** run `func --version`. If it prints a version starting with `4`, you are set. If the command is not found, install it with `npm install -g azure-functions-core-tools@4 --unsafe-perm true` and re-run `func --version`.
 
-**So what do you tell your lead?** For a three-person team shipping a standard web app, PaaS wins: the entire row of recurring server chores disappears, and the hours go to the catalog. The VM path is the right answer when the workload demands OS-level control or is being lifted from a datacenter as-is. The model is a choice about *where to spend responsibility*, not about which technology is better.
+```bash
+cd ~/compute-lab
+func init catalog-function --javascript
+cd catalog-function
+func new --name CatalogLookup --template "HTTP trigger" --authlevel anonymous
+```
+
+Open the generated function and see what it contains:
+
+```bash
+cat CatalogLookup/index.js
+```
+
+**What did `func init` and `func new` just do?** `func init` scaffolded a function app project — a small folder structure Azure Functions knows how to run, comparable to what `az webapp up` deployed for you invisibly in Step 8. `func new` added one function to it, triggered by an HTTP request, and wrote a working handler that reads a `name` query parameter and returns a greeting. Notice there is no web server in this code, no listening socket, no port binding — the trigger and the runtime that answers HTTP requests are the platform's job, not yours. You wrote a function; Azure Functions supplies everything around it.
+
+**Why does the *trigger* matter more than the code?** Because the trigger is the entire idea of serverless in one word: this function runs only when an HTTP request arrives (or, in other apps, when a queue message lands, a timer fires, or a file is uploaded). Between triggers, nothing is running and nothing is billing. Compare that to your VM, which billed every hour whether or not a single visitor showed up, or your App Service plan, which reserves capacity continuously. Functions is the one deployment in this lab where "idle" and "free" are the same thing.
 
 ---
 
-## Step 9 – Place the Rest of the Compute Menu
+## Step 10 – Deploy and Test the Function
 
-You deployed the two ends of the everyday spectrum, but the Azure compute menu is longer, and your lead will hear all of these names in vendor meetings. Every one of them is a different answer to the same two questions your scorecard just answered: *how much control do you need, and what are you staffed to operate?*
+A function app needs a storage account behind it (to manage triggers and logs) and a function app resource to run in:
+
+```bash
+az storage account create \
+  --name stfunc<yourinitials> \
+  --resource-group rg-compute-<yourinitials> \
+  --location eastus \
+  --sku Standard_LRS
+
+az functionapp create \
+  --resource-group rg-compute-<yourinitials> \
+  --consumption-plan-location eastus \
+  --runtime node \
+  --runtime-version 20 \
+  --functions-version 4 \
+  --name func-catalog-<yourinitials> \
+  --storage-account stfunc<yourinitials>
+```
+
+> **Note:** Storage account names must be globally unique, lowercase, 3–24 characters, letters and digits only. Add digits if `stfunc<yourinitials>` is taken.
+
+Now publish your code to it:
+
+```bash
+func azure functionapp publish func-catalog-<yourinitials>
+```
+
+The command prints an **Invoke URL** when it finishes. Test it, adding your own name to the query string:
+
+```bash
+curl "<the-invoke-url>&name=Catalog"
+```
+
+You should get back `Hello, Catalog. This HTTP triggered function executed successfully.` or similar.
+
+**Why did this deployment need a storage account when App Service did not?** Because Functions' billing and scaling model depends on tracking function state and logs outside of any single running instance — there is no "instance" sitting idle between requests the way there is with a VM or an App Service worker. The storage account is where that bookkeeping lives. It is a small, structural cost of getting the "billed only while running" model, not a design choice you can skip.
+
+**Why does `--consumption-plan-location` matter here specifically?** The **Consumption plan** is what makes this serverless: Azure allocates compute for your function on demand, for the duration of each execution, and then releases it. Contrast this with the App Service plan from Step 8, which reserved capacity continuously whether a request was in flight or not. If Cascade Outfitters' catalog lookup gets hit once a minute, Functions on Consumption is close to free; the same traffic pattern on a reserved VM or App Service plan pays for 24 hours of standby every day.
+
+> **Checkpoint:** Curling the Invoke URL returns a response, and no server, port, or firewall rule was ever mentioned to make that happen.
+
+---
+
+## Step 11 – Compare What You Actually Did
+
+Look back at your terminal history and fill in the scorecard your lead asked for:
+
+| | VM (IaaS) | App Service (PaaS) | Functions (serverless) |
+|---|---|---|---|
+| Steps to get to a working endpoint | Write cloud-init, create VM, open port, find IP | One `az webapp up` | `func init`/`func new`, create storage + function app, `func publish` |
+| Who chose and patches the OS | **You** | Microsoft | Microsoft — there is no OS you can see |
+| Who operates the web server (nginx/IIS) | **You** | Microsoft | N/A — no server process runs between requests |
+| Who configures inbound network access | **You** (the port was closed until you opened it) | Platform (HTTP/HTTPS just work) | Platform |
+| Billed for | Every hour the VM is allocated, busy or not | Every hour the plan is provisioned, busy or not | Only the seconds each function actually executes |
+| Can install anything, control everything | **Yes** | No — platform constraints apply | No — code only, shortest execution window |
+| What you deploy | A whole configured machine | Application content | A single function's code |
+| Recurring operational load | Patching, upgrades, disk, backups, hardening | Your app and its code | Your code only — no idle capacity to manage at all |
+
+**So what do you tell your lead?** For a three-person team shipping a standard web app, PaaS wins the main site: the entire row of recurring server chores disappears, and the hours go to the catalog. Functions wins for anything event-driven and bursty — a background job that runs a few times an hour has no business reserving a server plan around the clock. The VM path is the right answer when the workload demands OS-level control or is being lifted from a datacenter as-is. The model is a choice about *where to spend responsibility and money*, not about which technology is better.
+
+---
+
+## Step 12 – Place the Rest of the Compute Menu
+
+You deployed three points on the spectrum yourself, but the Azure compute menu is longer still, and your lead will hear all of these names in vendor meetings. Every one of them is a different answer to the same two questions your scorecard just answered: *how much control do you need, and what are you staffed to operate?*
 
 | Service | What it is | Reach for it when |
 |---|---|---|
 | **Virtual Machines** | The IaaS you just built | You need OS control, custom system software, or a lift-and-shift |
-| **VM Scale Sets** | A fleet of identical VMs that grows and shrinks automatically | Your VM workload needs to handle variable load — this is the *elasticity* from the slides applied to IaaS. Your single `vm-web` handled one visitor fine; a scale set is how the same design survives a holiday sale |
+| **VM Scale Sets** | A fleet of identical VMs that grows and shrinks automatically | Your VM workload needs to handle variable load — this is the *horizontal* scaling from Step 6 done automatically. Your single `vm-catalog` handled one visitor fine; a scale set is how the same design survives a holiday sale |
 | **Azure Virtual Desktop** | Full Windows desktops delivered from Azure | Users need a managed desktop from anywhere — remote work, contractors, secure workstations. It is IaaS solving an end-user problem, not an app-hosting one |
 | **App Service** | The PaaS you just used | Standard web apps and APIs — the default choice for teams like the catalog team |
-| **Azure Functions** | Individual pieces of code that run when an event fires, billed per execution | Glue code and background jobs: "when an order lands in the queue, resize the product image." No app is running — or billing — between events. This is *serverless*: the spectrum's far end, one step before SaaS |
+| **Azure Functions** | The serverless deployment you just built | Glue code and background jobs: "when an order lands in the queue, resize the product image." No app is running — or billing — between events |
 | **Container Instances (ACI)** | Run a single container, no cluster, per-second billing | A quick job or task that ships as a container |
 | **Container Apps** | Containers with scaling and HTTPS handled for you | Containerized apps and microservices without cluster management — roughly "App Service for containers" |
 | **Kubernetes Service (AKS)** | A managed Kubernetes cluster you operate | Many containers, complex orchestration needs, and — critically — engineers dedicated to running the platform |
 
-**Why do containers get three separate services?** Because a container answers a packaging question — "how do I ship my app with its dependencies so it runs the same everywhere?" — but not an operations question. ACI, Container Apps, and AKS are the same trade you spent this lab measuring, replayed for containers: minimum effort, managed middle, maximum control. If you can defend your VM-versus-App-Service recommendation, you can defend an AKS-versus-Container-Apps one with the same reasoning.
+**Why do containers get three separate services?** Because a container answers a packaging question — "how do I ship my app with its dependencies so it runs the same everywhere?" — but not an operations question. ACI, Container Apps, and AKS are the same trade you spent this lab measuring, replayed for containers: minimum effort, managed middle, maximum control. If you can defend your VM-versus-App-Service-versus-Functions recommendation, you can defend an AKS-versus-Container-Apps one with the same reasoning.
 
 **The honest summary for a three-person team:** App Service for the catalog site, Functions for its background jobs, and nobody touches AKS until there is a platform team to feed it. That sentence — matching the service to both the workload *and* the staffing — is the skill this module is actually teaching.
 
 ---
 
-## Step 10 – Clean Up (Not Optional Today)
+## Step 13 – Clean Up (Not Optional Today)
 
 This is the first lab where skipping cleanup costs real money — the VM bills every hour it exists, page or no page. Everything lives in one resource group, so one command ends it:
 
@@ -253,7 +355,7 @@ Verify it is going:
 az group list --output table
 ```
 
-**Why does deleting the group beat deleting the VM?** Remember Step 3: the "VM" was actually five resources. Deleting only the VM would leave the disk, the public IP, and the rest behind — some of which keep billing quietly. Because everything from this lab shares one resource group, the group delete guarantees nothing is orphaned. This is the lifecycle-container idea paying rent: cleanup was designed in back at Step 1, not improvised at the end.
+**Why does deleting the group beat deleting each resource one at a time?** Remember Step 3: the "VM" was actually six resources, and Step 10 added a function app plus its own storage account on top of that. Deleting only the VM would leave the disk, the public IP, the Functions storage account, and the rest behind — some of which keep billing quietly. Because everything from this lab shares one resource group, regardless of whether it was a VM, a web app, or a serverless function, the group delete guarantees nothing is orphaned. This is the lifecycle-container idea paying rent: cleanup was designed in back at Step 1, not improvised at the end.
 
 > **Checkpoint:** `rg-compute-<yourinitials>` no longer appears in the list (deletion may take a few minutes to finish).
 
@@ -267,11 +369,13 @@ az group list --output table
 | **cloud-init / custom data** | First-boot automation; repeatable server setup instead of hand-typed steps |
 | **A VM is a bundle** | Compute, disk, NIC, public IP, and NSG are separate resources wired together |
 | **Deny-by-default networking** | Port 80 was closed until you explicitly opened it — inbound exposure is your decision in IaaS |
+| **Vertical scaling** | `az vm resize` buys a bigger single machine — fast, but still one point of failure |
 | **PaaS (App Service)** | You brought content; the platform brought OS, web server, DNS, and TLS |
 | **App Service plan** | PaaS still runs on compute you choose and pay for — it abstracts the OS, not capacity |
-| **The trade** | Control and convenience move in opposite directions along the IaaS→PaaS spectrum |
+| **Serverless (Functions)** | No server at all between requests — billed per execution, on a Consumption plan that allocates compute on demand |
+| **Triggers** | The event (HTTP, queue, timer) that wakes a function; nothing runs — or bills — between triggers |
+| **The trade** | Control, convenience, and billing model all move together along the IaaS→PaaS→serverless spectrum |
 | **The full compute menu** | VMs, Scale Sets, Virtual Desktop, App Service, Functions, ACI, Container Apps, AKS — the same control-vs-convenience decision at eight price points |
-| **Serverless (Functions)** | Code runs per event and bills per execution — the far end of the spectrum |
 | **Lifecycle cleanup** | One resource group per purpose makes teardown one command with nothing orphaned |
 
 ---
@@ -282,19 +386,27 @@ Answer for yourself or discuss with a partner:
 
 1. The same page needed a five-flag `vm create` plus a cloud-init file on IaaS, and one `webapp up` on PaaS. Where did all that work *go* — who is doing it now?
 2. Name a workload for which the VM would have been the right answer despite the extra responsibility.
-3. On the shared responsibility diagram from the slides, put a finger on the line for your VM deployment, then for your App Service deployment. Which rows moved?
+3. On the shared responsibility diagram from the slides, put a finger on the line for your VM deployment, then for your App Service deployment, then for your Function. Which rows moved each time?
 4. Your VM's public IP responded on port 80 but nothing else. Why is that the correct default, and who chose to open 80?
+5. Resizing the VM in Step 6 took a deallocate-resize-start cycle and a few minutes of downtime. What would happen to that downtime if, instead of a bigger VM, you had put a *second* VM behind a load balancer? Why is that a different kind of scaling, not just a bigger version of the same one?
+6. Your Function billed nothing while it wasn't handling a request. Name one Cascade Outfitters workload from this course's scenario that fits that billing model well, and one that would not.
 
 ---
 
 ## Optional Challenge
 
-Redeploy the App Service page with a visible change: edit `index.html` (add a product list), then run the same `az webapp up` command again from the `catalog-site` folder and refresh the browser. Time it. Then estimate: what would the same content change have required on the VM path? This gap — seconds versus a login-edit-verify cycle — is why teams that ship frequently gravitate toward PaaS and automation. (If you attempt this, remember cleanup afterward.)
+Two independent challenges, pick either or both:
+
+1. Redeploy the App Service page with a visible change: edit `index.html` (add a product list), then run the same `az webapp up` command again from the `catalog-site` folder and refresh the browser. Time it. Then estimate: what would the same content change have required on the VM path? This gap — seconds versus a login-edit-verify cycle — is why teams that ship frequently gravitate toward PaaS and automation.
+
+2. Edit `CatalogLookup/index.js` in the Functions project to change the response message, then run `func azure functionapp publish func-catalog-<yourinitials>` again and re-test the Invoke URL. Time this redeploy too, and compare it against both of the others. Then check the **Monitor** tab on your function in the portal (search **Function App**, open `func-catalog-<yourinitials>`, open `CatalogLookup`, then **Monitor**) — you should see one logged execution per request you made. This is the billing unit for serverless made visible: not server-hours, but individual invocations.
+
+(If you attempt either, remember cleanup afterward.)
 
 ---
 
 ## Conclusion
 
-You deployed the identical application twice and lived the difference. On the VM you were the systems administrator: you specified the OS setup, opened the firewall, and logged in to a machine whose patch list now has your name on it. On App Service you were only the developer: content in, URL out, and the operating system became someone else's problem — at the price of someone else's rules.
+You deployed the same idea three ways and lived the differences. On the VM you were the systems administrator: you specified the OS setup, opened the firewall, resized the hardware under a running service, and logged in to a machine whose patch list now has your name on it. On App Service you were only the developer: content in, URL out, and the operating system became someone else's problem. On Functions you did not even think about a running server — you wrote a handler for one trigger, and Azure metered you by the execution instead of the hour.
 
-That trade — control for convenience, moving layer by layer from IaaS through PaaS to SaaS — is the single decision you will make most often in cloud architecture. In the next lab you take back one layer deliberately: the network. You will build the virtual network, subnets, and security rules that production workloads sit inside — and prove with packets who can reach what.
+That trade — control and continuous cost on one end, convenience and pay-per-use on the other — is the single decision you will make most often in cloud architecture. In the next lab you take back one layer deliberately: the network. You will build the virtual network, subnets, and security rules that production workloads sit inside — and prove with packets who can reach what.

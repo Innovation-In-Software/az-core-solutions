@@ -13,7 +13,7 @@ This lab answers all three. Along the way you will see the two structures from t
 
 And you will finish with the most important experiment of the day: applying a **resource lock** and attacking it from two different tools. When both the portal and the CLI are refused by the same rule, you are watching Azure Resource Manager enforce policy at the control plane — the single most useful thing to understand about how Azure works.
 
-As before, nothing here bills as long as you finish the cleanup step. Resource groups and locks are both free.
+As before, almost nothing here bills as long as you finish the cleanup step. Resource groups and locks are free; the one storage account you create to test moving resources between groups costs a fraction of a cent for the length of this lab.
 
 ### Prerequisites
 
@@ -63,6 +63,16 @@ Read the JSON and find two things:
 **Why do zones and pairs both exist — aren't they the same idea?** They protect against different sizes of disaster, and the difference is distance. **Zones** are separate buildings a few miles apart inside one region: deploy across them and a datacenter fire or power failure cannot take you down, while latency stays low enough for synchronous work. **Pairs** are whole regions hundreds of miles apart: replicate to the pair and even a hurricane that takes out the entire region cannot destroy your data. Zones are for *high availability* (staying up through a local failure); pairs are for *disaster recovery* (surviving a regional one). You will not deploy zonal resources today, but every resilience conversation you have in Azure will use these two words — and now you have seen where they live in the metadata.
 
 **One related term to keep straight:** an **availability set** is an older, smaller-scope mechanism that spreads VMs across racks *within one datacenter* — protection against a rack or maintenance event, not a building failure. Zones superseded sets for most new designs; you will mostly meet sets in existing systems.
+
+Now check a smaller or older region and compare:
+
+```bash
+az account list-locations --query "[?name=='westcentralus']"
+```
+
+Look at its `availabilityZoneMappings`. Unlike East US, this region reports zero zones. (If `westcentralus` ever gains zones, try `northcentralus` or `westus` — some regions simply are not zone-enabled.)
+
+**Why does that matter?** Because "every region has zones" is a beginner assumption this comparison corrects on the spot. Not every region is zone-enabled — some smaller or older regions never got zones, and some newer ones launch without them and add them later. This is exactly why "availability zones" appeared as its own bullet in the region-choice factors: before you design a zone-redundant deployment, you have to confirm the region you picked actually offers zones at all. Checking two regions side by side, instead of taking the first one's specs on faith, is the habit worth keeping.
 
 ---
 
@@ -116,7 +126,72 @@ Cost reports slice by tags, access reviews filter by tags, and cleanup scripts t
 
 ---
 
-## Step 6 – Read It Back, Two Ways
+## Step 6 – Meet the Resource Providers Behind ARM
+
+Every command you have run so far has actually been a request to a specific **resource provider** — a namespace of related services that Azure Resource Manager routes work to. List the ones registered in your subscription:
+
+```bash
+az provider list --query "[?registrationState=='Registered'].namespace" --output table
+```
+
+Now look at one closely:
+
+```bash
+az provider show --namespace Microsoft.Compute --query "{namespace:namespace, state:registrationState}" --output table
+```
+
+**Why does this matter, when you have never typed the word "provider" in this course?** Because it explains a piece of ARM's architecture you have been relying on without naming. `Microsoft.Resources` is the provider behind everything you have done today (`az group create`, locks). Tomorrow's compute lab uses `Microsoft.Compute`; the networking lab uses `Microsoft.Network`. Every resource type in Azure — `Microsoft.Storage/storageAccounts`, `Microsoft.Sql/servers`, hundreds more — belongs to exactly one provider, and ARM is really a router: it reads the resource type in your request and hands it to the provider that knows how to fulfill it.
+
+**Why would a provider ever need registering?** A subscription only needs a provider *registered* the first time it uses that service — this is why a brand-new subscription can occasionally throw a `MissingSubscriptionRegistration` error the very first time someone tries a new service like `Microsoft.ContainerService` (AKS). The fix is a one-line `az provider register --namespace <name>` and then a wait of a minute or two. Recognizing that error message on sight, instead of assuming something is broken, is a small piece of professional pattern-matching this step gives you for free.
+
+---
+
+## Step 7 – Prove a Resource Group Organizes, Not Contains
+
+The slides call a resource group a "container," and Step 5 called it a "filing cabinet." Test that metaphor by moving something between two of them.
+
+Create a second resource group and a trivial, free-tier resource inside your first one:
+
+```bash
+az group create \
+  --name rg-catalog-archive-<yourinitials> \
+  --location eastus \
+  --tags project=catalog environment=dev owner=<yourinitials>
+
+az storage account create \
+  --name stcatalog<yourinitials> \
+  --resource-group rg-catalog-<yourinitials> \
+  --location eastus \
+  --sku Standard_LRS \
+  --kind StorageV2
+```
+
+> **Note:** Storage account names must be globally unique, lowercase, and 3–24 characters, letters and numbers only. If the name is taken, add a couple of digits.
+
+Now move it to the other group without deleting or recreating it:
+
+```bash
+az resource move \
+  --destination-group rg-catalog-archive-<yourinitials> \
+  --ids $(az storage account show --name stcatalog<yourinitials> --resource-group rg-catalog-<yourinitials> --query id --output tsv)
+```
+
+Confirm it landed:
+
+```bash
+az resource list --resource-group rg-catalog-archive-<yourinitials> --output table
+az resource list --resource-group rg-catalog-<yourinitials> --output table
+```
+
+**Why does this matter more than it looks like it should?** Because it proves resource groups organize resources rather than physically holding them. The storage account's data, its region, its configuration — none of it changed. Only its membership in the logical hierarchy changed, which is exactly why resource groups can be reorganized as a project evolves (a resource outgrows a shared group, a team splits in two, an environment gets its own group) without the disruptive step of rebuilding anything. Contrast this with the region a resource lives in, which generally *cannot* be changed this way — moving groups is cheap; moving regions usually means recreating the resource.
+
+**Why is this the resource group's real job description?** A resource group is a set of pointers to resources plus the metadata (tags, locks, access assignments) attached to that set — not a physical location. `az resource move` changes which set a resource's pointer belongs to. Keep this distinction sharp: region is where a resource *runs*; resource group is how it is *organized, billed, and governed*. They are independent axes, and today's exercise moved one without touching the other.
+
+> **Checkpoint:** `stcatalog<yourinitials>` appears in `rg-catalog-archive-<yourinitials>` and no longer appears in `rg-catalog-<yourinitials>`.
+
+---
+
+## Step 8 – Read It Back, Two Ways
 
 First the summary:
 
@@ -140,7 +215,7 @@ The second command prints a JSON **deployment template** of everything *inside* 
 
 ---
 
-## Step 7 – Lock the Group Against Deletion
+## Step 9 – Lock the Group Against Deletion
 
 Your lead's third question: make the intern incident impossible. Apply a **resource lock**:
 
@@ -166,7 +241,7 @@ The catalog project is under active development, so the team must be able to cha
 
 ---
 
-## Step 8 – Attack the Lock from the Portal
+## Step 10 – Attack the Lock from the Portal
 
 Time for the experiment. In the portal, open `rg-catalog-<yourinitials>`, click **Delete resource group**, type the name to confirm, and attempt the delete.
 
@@ -176,7 +251,7 @@ Read the error message before moving on — notice it identifies the locked scop
 
 ---
 
-## Step 9 – Attack the Lock from the CLI
+## Step 11 – Attack the Lock from the CLI
 
 Now try the other door. In Cloud Shell:
 
@@ -194,7 +269,7 @@ This is why you cannot "get around" a lock, a permission, or a policy by switchi
 
 ---
 
-## Step 10 – Remove the Lock, Then Clean Up
+## Step 12 – Remove the Lock, Then Clean Up
 
 Removing the lock is the deliberate second step that makes deletion possible again:
 
@@ -202,13 +277,14 @@ Removing the lock is the deliberate second step that makes deletion possible aga
 az lock delete --name protect-catalog --resource-group rg-catalog-<yourinitials>
 ```
 
-Now the delete goes through:
+Now both groups can go — the locked one, and the archive group from Step 7:
 
 ```bash
 az group delete --name rg-catalog-<yourinitials> --yes --no-wait
+az group delete --name rg-catalog-archive-<yourinitials> --yes --no-wait
 ```
 
-Confirm it is gone (or going):
+Confirm they are gone (or going):
 
 ```bash
 az group list --output table
@@ -232,6 +308,8 @@ az group list --output table
 | **Regional pricing** | The same VM costs different amounts in different regions |
 | **The logical hierarchy** | Management groups → subscriptions → resource groups; rules set above you flow down |
 | **Tags as governance** | `project`, `environment`, `owner`, `cost-center` answer the four questions every org asks |
+| **Resource providers** | Every resource type belongs to a namespace (`Microsoft.Compute`, `Microsoft.Storage`) that ARM routes requests to |
+| **`az resource move`** | A resource group organizes and governs — it does not physically hold. Moving groups leaves the resource itself untouched |
 | **`az group export`** | Every resource is JSON underneath — the seed of infrastructure as code |
 | **Resource locks** | `CanNotDelete` blocks deletion for everyone until deliberately removed |
 | **ARM enforcement** | The portal and the CLI were refused by the same rule, because rules live at the control plane, not in tools |
@@ -246,6 +324,7 @@ Answer for yourself or discuss with a partner:
 2. A teammate has permission to modify but not delete a resource. Would switching from the portal to the CLI let them delete it? Why or why not?
 3. Your company must keep customer data in Canada, wants the lowest latency for users in Vancouver, and needs a service that is only available in `canadacentral`. Walk through how the four region factors settle the choice.
 4. Give one real situation where you would choose a `ReadOnly` lock over `CanNotDelete` — and one risk of doing so.
+5. You moved a storage account from one resource group to another with `az resource move`, and neither its data nor its region changed. What two things *did* change, and why does that distinction matter when a project reorganizes?
 
 ---
 

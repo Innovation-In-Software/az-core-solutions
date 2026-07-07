@@ -9,8 +9,8 @@ You have just joined the cloud team at **Cascade Outfitters**, a retailer that i
 That assignment is this lab. Along the way you will confirm three ideas from the slides with your own hands:
 
 - **The cloud is renting computing and paying for use** — you will find the page where the meter is read.
-- **A resource group is the container everything lives in** — you will create one two different ways.
-- **Every tool talks to the same control plane (Azure Resource Manager)** — you will watch the portal and the CLI produce identical results, and see both operations recorded in the same activity log.
+- **A resource group is the container everything lives in** — you will create one three different ways.
+- **Every tool talks to the same control plane (Azure Resource Manager)** — you will watch the portal, the CLI, and PowerShell produce identical results, and see all of it recorded in the same activity log and found by the same tag search.
 
 Nothing in this lab costs money as long as you complete the cleanup step. A resource group is free — it only holds things; it does not bill.
 
@@ -59,7 +59,11 @@ Your cost right now should be at or near zero — you have not created anything 
 
 **This page is also the CapEx-to-OpEx shift from the slides, made visible.** Cascade Outfitters used to buy servers — a capital expense committed years in advance, whether the hardware ran hot or sat idle. In Azure, this page *is* the spend: an operating expense that starts at zero, moves only when you allocate something, and stops when you clean up. That is why the CFO cares about a page you can check daily instead of a purchase order signed once every three years.
 
-> **Checkpoint:** You can say out loud which directory and subscription you are in, and where you would go to check spending.
+**Put a guardrail on it while you are here.** In the left menu, open **Budgets**, then **+ Add**. Give it a name like `catalog-training-budget`, set the amount to something small like **$5**, and set an alert condition at **80%** of that amount, with your own email as the recipient. Save it.
+
+**Why add a budget on a subscription that is nowhere near spending $5?** Because the right time to set a guardrail is *before* you need it, not after a surprise bill. A budget does not stop spending — it is not a lock — but it emails someone the moment actual or forecasted cost crosses a threshold. In a real organization, budgets are how a team catches a runaway resource on day two of a mistake instead of day thirty, when the invoice arrives. You will not hit this $5 threshold today, but you now know exactly where you would set one on a project that matters.
+
+> **Checkpoint:** You can say out loud which directory and subscription you are in, where you would go to check spending, and you have a budget alert configured (even though it will not fire today).
 
 ---
 
@@ -73,6 +77,8 @@ Click the Cloud Shell icon (`>_`) in the top toolbar.
 > **Note:** The first launch may create a small storage account so your shell files persist between sessions. This is expected and costs only pennies per month. You can remove it after class if you wish.
 
 **Why Cloud Shell instead of installing the CLI on your laptop?** Cloud Shell is a terminal that runs in your browser with the Azure CLI and Azure PowerShell already installed and already signed in as you. There is nothing to install, no versions to manage, and it works identically on every laptop in the room. It is also a live demonstration of a point from the slides: the command line and the portal are just **different doors into the same Azure**. You are about to prove that.
+
+While you are here, notice two more icons in the Cloud Shell toolbar: a small **folder icon** (Manage files — upload and download files between your laptop and the storage account behind Cloud Shell) and a **pencil/brackets icon** (a built-in code editor for editing files without leaving the browser). You will not need either in this lab, since every file you create today comes from a short command pasted straight into the terminal, but later labs build multi-line configuration files, and knowing the editor is one click away saves you from fighting `nano` or `vi` syntax under time pressure.
 
 ---
 
@@ -157,15 +163,41 @@ The command returns a block of JSON describing what it created. Read it — you 
 
 ---
 
-## Step 9 – Verify Both Groups from Both Doors
+## Step 9 – Do It a Third Way: Azure PowerShell
 
-First, from the CLI:
+Cloud Shell speaks two languages. So far you have used Bash and the Azure CLI (`az`). Switch to the other one.
+
+In the Cloud Shell toolbar, find the shell-type dropdown (it currently shows **Bash**) and switch it to **PowerShell**. Cloud Shell restarts in a few seconds — you stay signed in as the same account, in the same subscription.
+
+Confirm you landed in the same place:
+
+```powershell
+Get-AzContext
+```
+
+Now create a third resource group, this time with a PowerShell cmdlet:
+
+```powershell
+New-AzResourceGroup -Name "rg-catalog-ps-<yourinitials>" -Location "eastus" -Tag @{course="azure-core-solutions"; "created-by"="powershell"}
+```
+
+**Why bother with a third tool that does the same thing?** Two reasons. First, the outline lists PowerShell alongside the CLI as one of the ways teams automate Azure — Windows-heavy shops and teams already scripting in PowerShell for other Microsoft products often standardize on it instead of Bash, and you should recognize it on sight. Second, and more important for this lab: notice what did *not* change. You did not sign in again. You did not pick a subscription again. `Get-AzContext` returned the same subscription `az account show` did back in Step 5. That is Azure Resource Manager again — a third client, the same identity, the same control plane, the same rules.
+
+**Why does the cmdlet look so different from the CLI command?** PowerShell cmdlets follow a strict **Verb-Noun** pattern — `New-AzResourceGroup`, `Get-AzResourceGroup`, `Remove-AzResourceGroup` — while the Azure CLI follows `az <noun> <verb>` — `az group create`, `az group show`, `az group delete`. Different grammar, same underlying request. If you can read one, you can guess the other: `Get-` is `show`/`list`, `New-` is `create`, `Remove-` is `delete`. Notice also that the tag argument is a PowerShell hashtable (`@{key="value"}`) instead of the CLI's `key=value` pairs — same data, different syntax for the same language's own conventions.
+
+Switch back to **Bash** before continuing (the same dropdown) — the rest of this lab uses `az`.
+
+---
+
+## Step 10 – Verify All Three Groups from Every Door
+
+Back in Bash, list everything:
 
 ```bash
 az group list --output table
 ```
 
-You should see **both** resource groups — the one made in the portal and the one made with the CLI, side by side in one list.
+You should now see **three** resource groups — portal, CLI, and PowerShell — one list, three tools.
 
 Now read the tags on the CLI-created group:
 
@@ -173,17 +205,30 @@ Now read the tags on the CLI-created group:
 az group show --name rg-catalog-cli-<yourinitials> --query tags
 ```
 
-Finally, go back to the portal, open **Resource groups**, and refresh. Both groups appear there too.
+Finally, go back to the portal, open **Resource groups**, and refresh. All three groups appear there too, including the one PowerShell created.
 
-**Why check from both sides?** This closes the loop. One list, two tools, resources created through two different doors — and each tool sees everything, instantly. There is no "portal Azure" and "CLI Azure." There is one Azure, one control plane, and many clients. Once this clicks, a whole category of confusion ("do I need to sync the portal with my script?") never happens to you.
+**Why check from three sides instead of two?** Because two could be a coincidence; three is a pattern. Portal, CLI, PowerShell — three different interfaces, three different people's preferred tool, one identical result each time. There is no "portal Azure," "CLI Azure," or "PowerShell Azure." There is one Azure, one control plane, and as many clients as anyone cares to write. Once this clicks, a whole category of confusion ("do I need to sync the portal with my script?") never happens to you.
 
 **What is `--query` doing?** It filters the JSON output down to just the piece you asked for — here, the tags. The Azure CLI uses a query language called JMESPath for this. You do not need to master it today; just know that any time a command returns a wall of JSON, `--query` can extract exactly the field you care about.
 
-> **Checkpoint:** Both `rg-catalog-portal-<yourinitials>` and `rg-catalog-cli-<yourinitials>` appear in `az group list`, and both carry the `course` tag.
+> **Checkpoint:** All three resource groups appear in `az group list`, and each one carries the tags you gave it.
 
 ---
 
-## Step 10 – Read the Activity Log: ARM's Receipt
+## Step 11 – Find Resources by Tag Across the Subscription
+
+So far you have checked tags one resource group at a time. Real subscriptions have thousands of resources, and nobody reads them one at a time. In the portal, search for **Tags** and open it.
+
+1. Click the **course** tag.
+2. You should see every resource carrying that tag listed together — all three of your resource groups, regardless of which tool created them or what they are named.
+
+**Why does this page matter more once you leave the classroom?** Because "find everything that belongs to the catalog project" or "find everything owner `js` is responsible for" are questions a real team asks constantly — during an audit, during an incident, during a cost review — and tags are the only mechanism that answers them *without* relying on naming conventions. A resource group named `rg-catalog-cli-js` tells a human what it is, but a script or a report has to parse that name and guess. A tag is structured data built for exactly this kind of query. This is the same mechanism Microsoft Cost Management and Azure Policy lean on later in the course — you are looking at its simplest form today.
+
+> **Checkpoint:** The Tags page shows all three of your resource groups under `course`.
+
+---
+
+## Step 12 – Read the Activity Log: ARM's Receipt
 
 In the portal, open `rg-catalog-cli-<yourinitials>` (the one you created from the command line), then open **Activity log** in its left menu.
 
@@ -193,18 +238,25 @@ You should see an **Update resource group** operation, recorded a few minutes ag
 
 **Why is this the most interesting page in the lab?** Because it is Azure Resource Manager's receipt. Every create, update, and delete — from the portal, the CLI, PowerShell, or a program — passes through ARM, and ARM logs every one of them in the same place. The portal is simply *displaying* that log. This is what "one control plane" buys you in practice: one audit trail, no matter which tool anyone on the team prefers. When something changes unexpectedly in a real subscription, this log is where the investigation starts.
 
+Now open `rg-catalog-ps-<yourinitials>` — the group you created with PowerShell — and check its Activity log too. Click into the entry and expand it.
+
+**What is different about this entry, and what is the same?** The event's details will show the request came from a different client (Azure PowerShell, rather than the Azure CLI), and possibly a different-looking correlation ID. That is the "different" part — ARM does track which tool made each call, which is exactly how a real investigation narrows down "who ran this and from where." The "same" part is everything that matters for governance: the operation name, the outcome, and the fact that it is sitting in the identical Activity log view as your CLI and portal groups. Three tools, three slightly different fingerprints, one uniform record.
+
 ---
 
-## Step 11 – Clean Up
+## Step 13 – Clean Up
 
-Deleting a resource group deletes everything inside it. Both of yours are empty, so this is safe and quick.
+Deleting a resource group deletes everything inside it. All three of yours are empty, so this is safe and quick.
 
 In Cloud Shell:
 
 ```bash
 az group delete --name rg-catalog-portal-<yourinitials> --yes --no-wait
 az group delete --name rg-catalog-cli-<yourinitials> --yes --no-wait
+az group delete --name rg-catalog-ps-<yourinitials> --yes --no-wait
 ```
+
+**Why does one CLI command clean up the group PowerShell created?** Because delete, like create, is just a request to Azure Resource Manager — the tool that issued the original request has no special claim over undoing it. `Remove-AzResourceGroup -Name "rg-catalog-ps-<yourinitials>"` would work identically if you switched back to PowerShell; using the CLI here simply saves you a shell swap. This is the same "one control plane" idea from Step 9, viewed from the exit instead of the entrance.
 
 Confirm they are going (deletion takes a minute or two):
 
@@ -227,7 +279,10 @@ az group list --output table
 | **Resource group region** | Sets where the group's *metadata* lives, not where its resources must run |
 | **Cloud Shell** | A zero-setup terminal in the browser, already signed in as you |
 | **`az group create` / `list` / `show` / `delete`** | The CLI verbs you will use most, with `--output` and `--query` to shape results |
+| **Azure PowerShell** | The `Verb-Noun` cmdlet style (`New-AzResourceGroup`), a third client of the same control plane |
 | **Tags** | Labels applied at creation time that make cost and ownership traceable |
+| **Tags page** | Finds every resource with a given tag across the whole subscription, regardless of name or tool |
+| **Budgets** | A guardrail set *before* spending happens, not a lock — it alerts, it does not block |
 | **Azure Resource Manager** | One control plane behind every tool — proven by identical results and a single activity log |
 | **Cleanup** | The customer-side habit that prevents surprise bills |
 
@@ -237,20 +292,22 @@ az group list --output table
 
 Answer for yourself or discuss with a partner:
 
-1. Why did the portal and the CLI produce the same kind of resource group?
+1. Why did the portal, the CLI, and PowerShell all produce the same kind of resource group?
 2. Your resource group was in East US. Could you have placed a virtual machine from West Europe inside it? Why or why not?
 3. What is the risk of skipping the cleanup step once you start creating resources that bill?
+4. `New-AzResourceGroup` and `az group create` look nothing alike on the page. Why doesn't that difference matter to Azure Resource Manager?
+5. A budget alert emailed the team that spending crossed 80% of its threshold. Nothing stopped running. Why is that the correct behavior for a budget, and what would you reach for if you actually wanted spending to stop?
 
 ---
 
 ## Optional Challenge
 
-Create a third resource group in a **different region** than your first, with two tags applied in one command (`course` and `owner`). Confirm the region and tags using `az group show` with a `--query`, then delete it. If you finish early, run `az group list --output json` and compare it to the table output — find three properties the table view was hiding from you.
+Create a fourth resource group in a **different region** than your first, with two tags applied in one command (`course` and `owner`), using whichever tool (CLI or PowerShell) you did not use last. Confirm the region and tags using `az group show` (or `Get-AzResourceGroup`) with a query, then delete it. If you finish early, run `az group list --output json` and compare it to the table output — find three properties the table view was hiding from you.
 
 ---
 
 ## Conclusion
 
-You signed in to a brand-new subscription, learned the four landmarks that prevent most beginner mistakes, found the page where spending is tracked, and created the same resource two ways — then watched one activity log record both operations. The portal and the CLI are different doors into one control plane, and you have now walked through both.
+You signed in to a brand-new subscription, learned the four landmarks that prevent most beginner mistakes, found the page where spending is tracked, and created the same resource three ways — portal, CLI, and PowerShell — then watched one activity log and one tag search treat all three identically. The portal, the CLI, and PowerShell are different doors into one control plane, and you have now walked through all three.
 
 In the next lab you will use that control plane against itself: you will lock a resource and watch Azure Resource Manager refuse to delete it — from every door at once.
