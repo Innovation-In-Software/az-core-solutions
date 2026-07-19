@@ -49,16 +49,16 @@ Scroll the list. There are more than 70 regions.
 
 **Why did we use `--query` again?** The raw output of `list-locations` includes metadata you do not need yet (coordinates, region categories, pairing information). The query keeps the two columns that matter today. Some of what it filtered out is worth seeing, though — that is the next command.
 
-Now look inside one region. Ask for everything Azure knows about `eastus`:
+Now look inside the region you deploy to in this class. Ask for everything Azure knows about `centralus`:
 
 ```bash
-az account list-locations --query "[?name=='eastus']"
+az account list-locations --query "[?name=='centralus']"
 ```
 
 Read the JSON and find two things:
 
-1. **`availabilityZoneMappings`** — a list of zones (`eastus-az1`, `eastus-az2`, `eastus-az3`). These are the **availability zones** from the slides: physically separate datacenters inside the region, each with independent power, cooling, and networking.
-2. **`pairedRegion`** — for East US, the value is `westus`. This is the region's built-in **region pair** for geo-redundancy.
+1. **`availabilityZoneMappings`** — a list of zones (`centralus-az1`, `centralus-az2`, `centralus-az3`). These are the **availability zones** from the slides: physically separate datacenters inside the region, each with independent power, cooling, and networking.
+2. **`pairedRegion`** — for Central US, the value is `eastus2`. This is the region's built-in **region pair** for geo-redundancy.
 
 **Why do zones and pairs both exist — aren't they the same idea?** They protect against different sizes of disaster, and the difference is distance. **Zones** are separate buildings a few miles apart inside one region: deploy across them and a datacenter fire or power failure cannot take you down, while latency stays low enough for synchronous work. **Pairs** are whole regions hundreds of miles apart: replicate to the pair and even a hurricane that takes out the entire region cannot destroy your data. Zones are for *high availability* (staying up through a local failure); pairs are for *disaster recovery* (surviving a regional one). You will not deploy zonal resources today, but every resilience conversation you have in Azure will use these two words — and now you have seen where they live in the metadata.
 
@@ -70,7 +70,7 @@ Now check a smaller or older region and compare:
 az account list-locations --query "[?name=='westcentralus']"
 ```
 
-Look at its `availabilityZoneMappings`. Unlike East US, this region reports zero zones. (If `westcentralus` ever gains zones, try `northcentralus` or `westus` — some regions simply are not zone-enabled.)
+Look at its `availabilityZoneMappings`. Unlike Central US, this region reports zero zones. (If `westcentralus` ever gains zones, try `northcentralus` or `westus` — some regions simply are not zone-enabled.)
 
 **Why does that matter?** Because "every region has zones" is a beginner assumption this comparison corrects on the spot. Not every region is zone-enabled — some smaller or older regions never got zones, and some newer ones launch without them and add them later. This is exactly why "availability zones" appeared as its own bullet in the region-choice factors: before you design a zone-redundant deployment, you have to confirm the region you picked actually offers zones at all. Checking two regions side by side, instead of taking the first one's specs on faith, is the habit worth keeping.
 
@@ -82,11 +82,11 @@ Open the **Azure Pricing Calculator** at **https://azure.microsoft.com/pricing/c
 
 1. Add a **Virtual Machines** item.
 2. Pick a small size (a D2 v5 or similar is fine).
-3. Switch the **Region** dropdown between **East US** and a region in Europe or Asia. Watch the monthly estimate change.
+3. Switch the **Region** dropdown between **Central US** and a region in Europe or Asia. Watch the monthly estimate change.
 
 **Why does the identical VM cost different amounts in different places?** Because a region is real buildings drawing real electricity on real land, and energy, real estate, and demand vary by country. Azure's prices reflect those local costs. You do not need to memorize any numbers — the habit is the point: when a region choice is open, check **availability** first, then **latency**, **compliance**, and **price**. Teams with flexible workloads sometimes save meaningfully just by choosing a cheaper nearby region.
 
-> **Checkpoint:** You can name one service that is not available in every region, you found East US's three availability zones and its paired region in the metadata, and you have seen the same VM priced differently in two regions. You can now answer your lead's first question.
+> **Checkpoint:** You can name one service that is not available in every region, you found Central US's three availability zones and its paired region in the metadata, and you have seen the same VM priced differently in two regions. You can now answer your lead's first question.
 
 ---
 

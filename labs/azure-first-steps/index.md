@@ -133,7 +133,7 @@ This is the container the Cascade Outfitters catalog project will live in. First
    |---|---|
    | Subscription | Leave your subscription selected |
    | Resource group name | `rg-catalog-portal-<yourinitials>` (for example `rg-catalog-portal-js`) |
-   | Region | A region near you (for example **Central US**) |
+   | Region | **Central US** |
 
 3. Click **Next: Tags** and add one tag:
 

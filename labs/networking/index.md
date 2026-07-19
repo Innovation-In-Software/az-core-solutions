@@ -213,7 +213,7 @@ az vm create \
   --generate-ssh-keys
 ```
 
-> **Note:** If a size or capacity error appears, add `--location westus3` to the group in Step 2 and rebuild, or ask your instructor.
+> **Note:** If a size or capacity error appears, ask your instructor before switching regions — the class uses Central US deliberately, and moving on your own can land you where the rest of the lab has not been tested.
 
 **Why `--nsg ""`?** Left to itself, `az vm create` makes a fresh NSG for each VM's network interface — that is the "quietly created" behavior from the last lab. The empty string says: create no NIC-level NSG; this network is governed at the subnet, where we put the rules on purpose. One layer of rules, in one predictable place.
 
