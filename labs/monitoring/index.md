@@ -38,13 +38,13 @@ The Activity Log you just viewed is not, by itself, richly queryable — you fil
 ```bash
 az group create \
   --name rg-monitor-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 
 az monitor log-analytics workspace create \
   --resource-group rg-monitor-<yourinitials> \
   --workspace-name log-catalog-<yourinitials> \
-  --location eastus
+  --location centralus
 ```
 
 **What is a Log Analytics workspace, and why is it the center of everything?** It is a queryable store for log and metric data, and it is the engine behind most of Azure Monitor. Diagnostic data from dozens of sources — the Activity Log, VM performance counters, Key Vault access logs, application telemetry — can all flow into one workspace, where a single query language reaches across all of it. That consolidation is the whole value: instead of ten separate log views you cannot correlate, you get one place to ask "show me every delete, from every resource, in the last hour." Think of it as the observability counterpart to what Azure Resource Manager is for control: one hub, many feeds.
@@ -63,7 +63,7 @@ WS_ID=$(az monitor log-analytics workspace show \
 
 az monitor diagnostic-settings subscription create \
   --name activity-to-la \
-  --location eastus \
+  --location centralus \
   --workspace "$WS_ID" \
   --logs '[{"category":"Administrative","enabled":true},{"category":"Policy","enabled":true},{"category":"Security","enabled":true}]'
 ```
@@ -79,7 +79,7 @@ az monitor diagnostic-settings subscription create \
 While ingestion catches up, create a small, deliberate event you can later hunt for in the logs — create and delete a resource group:
 
 ```bash
-az group create --name rg-monitor-signal-<yourinitials> --location eastus \
+az group create --name rg-monitor-signal-<yourinitials> --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 
 az group delete --name rg-monitor-signal-<yourinitials> --yes

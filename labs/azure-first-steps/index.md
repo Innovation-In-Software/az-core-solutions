@@ -24,7 +24,15 @@ Nothing in this lab costs money as long as you complete the cleanup step. A reso
 
 ## Step 1 – Sign In to the Azure Portal
 
-Go to **https://portal.azure.com** and sign in with your Azure account.
+Go to **https://portal.azure.com** and sign in with the account your instructor provided — the **username and temporary password** for your student account. If you are prompted to change the password or set up multi-factor authentication on first sign-in, follow the prompts.
+
+**Sign in on the command line too.** Later in this lab you will use the Azure CLI (`az`). If you use **Cloud Shell** (Step 4), it signs you in automatically as this same account, so you can skip the command below. If you are running the CLI from a terminal on your own machine, sign in there with:
+
+```bash
+az login
+```
+
+A browser window opens; sign in with the same student credentials. When it finishes, the terminal is authenticated as your account and every `az` command runs as you. (If no browser can open in your environment, run `az login --use-device-code` instead and follow the printed instructions.)
 
 **Why start with the portal instead of the command line?** The portal is the web front door to Azure, and it is the best place to *learn* because you can see everything: every service, every setting, every price. But it is only one of several doors into the same platform. By the end of this lab you will have used two of them and confirmed they lead to the same place. Professionals tend to graduate from the portal to the CLI as their work becomes repetitive — you will feel why later in this lab.
 
@@ -37,9 +45,9 @@ Take a few minutes and locate each of these. Do not change anything yet — just
 | Landmark | Where it is | What it is for |
 |---|---|---|
 | **Global search bar** | Top center | The fastest way to reach any service or resource. Type `resource groups` and notice it finds both *services* and *your own resources*. |
-| **Portal menu** | Three-line icon, top left | The list of all services, and the **Create a resource** button. |
-| **Account and directory** | Your avatar, top right | Shows which account you are signed in as and which **directory** (also called a *tenant*) you are working in. Click it and read the directory name. (Your current **subscription** lives one step away — you will find it in the next step.) |
-| **Cloud Shell icon** | Top toolbar, looks like `>_` | A terminal in your browser. You will open it in Step 4. |
+| **Portal menu** | The **☰** icon, top-left | Opens the list of all services and the **Create a resource** button. |
+| **Account and directory** | Your account icon, top-right | Shows the account you are signed in as and your **directory** (tenant). Click it and read the directory name. (Your **subscription** is one step away — the next step.) |
+| **Cloud Shell icon** | The **`>_`** icon in the top toolbar | A terminal in your browser. You will open it in Step 4. |
 
 **Why does this matter?** Almost every problem a beginner hits in Azure reduces to one of two things: *"I was in the wrong subscription"* or *"I could not find the thing."* Knowing these four landmarks prevents most of that. The subscription deserves special attention: it is both your **billing boundary** and a **limit on scale** (each subscription has resource quotas), so you should always know which one you are in before you create anything.
 
@@ -48,8 +56,8 @@ Take a few minutes and locate each of these. Do not change anything yet — just
 ## Step 3 – Find Where the Money Goes
 
 1. In the search bar, type **Subscriptions** and open it.
-2. Click your subscription.
-3. In the left menu, open **Cost analysis** (if Cost analysis is not available on your account type, open **Overview** instead).
+2. Click your subscription (**iis-student-az-09**, or the one your instructor assigned).
+3. In the subscription's left menu, expand the **Cost Management** section and select **Cost analysis** (if it does not load on your account type, open **Overview** instead).
 
 Your cost right now should be at or near zero — you have not created anything that bills.
 
@@ -59,7 +67,7 @@ Your cost right now should be at or near zero — you have not created anything 
 
 **This page is also the CapEx-to-OpEx shift from the slides, made visible.** Cascade Outfitters used to buy servers — a capital expense committed years in advance, whether the hardware ran hot or sat idle. In Azure, this page *is* the spend: an operating expense that starts at zero, moves only when you allocate something, and stops when you clean up. That is why the CFO cares about a page you can check daily instead of a purchase order signed once every three years.
 
-**Put a guardrail on it while you are here.** In the left menu, open **Budgets**, then **+ Add**. Give it a name like `catalog-training-budget`, set the amount to something small like **$5**, and set an alert condition at **80%** of that amount, with your own email as the recipient. Save it.
+**Put a guardrail on it while you are here.** In the same left menu, still under **Cost Management**, select **Budgets** → **+ Add**. Give it a name like `catalog-training-budget`, set the amount to something small like **$5**, click **Next**, and add an **alert condition** at **80%** of budget with your own email as the recipient. Click **Create**.
 
 **Why add a budget on a subscription that is nowhere near spending $5?** Because the right time to set a guardrail is *before* you need it, not after a surprise bill. A budget does not stop spending — it is not a lock — but it emails someone the moment actual or forecasted cost crosses a threshold. In a real organization, budgets are how a team catches a runaway resource on day two of a mistake instead of day thirty, when the invoice arrives. You will not hit this $5 threshold today, but you now know exactly where you would set one on a project that matters.
 
@@ -69,10 +77,10 @@ Your cost right now should be at or near zero — you have not created anything 
 
 ## Step 4 – Open Cloud Shell
 
-Click the Cloud Shell icon (`>_`) in the top toolbar.
+Click the **`>_` Cloud Shell** icon in the top toolbar.
 
-1. If prompted for a shell type, choose **Bash**.
-2. If prompted to create storage the first time, accept the defaults.
+1. On the welcome screen, choose **Bash**.
+2. If prompted about storage, accept the default (an ephemeral session needs no storage account).
 
 > **Note:** The first launch may create a small storage account so your shell files persist between sessions. This is expected and costs only pennies per month. You can remove it after class if you wish.
 
@@ -125,7 +133,7 @@ This is the container the Cascade Outfitters catalog project will live in. First
    |---|---|
    | Subscription | Leave your subscription selected |
    | Resource group name | `rg-catalog-portal-<yourinitials>` (for example `rg-catalog-portal-js`) |
-   | Region | A region near you (for example **East US**) |
+   | Region | A region near you (for example **Central US**) |
 
 3. Click **Next: Tags** and add one tag:
 
@@ -151,7 +159,7 @@ Now do the same thing the other way. In Cloud Shell, run (change the initials):
 ```bash
 az group create \
   --name rg-catalog-cli-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags course=azure-core-solutions created-by=cli
 ```
 
@@ -178,7 +186,7 @@ Get-AzContext
 Now create a third resource group, this time with a PowerShell cmdlet:
 
 ```powershell
-New-AzResourceGroup -Name "rg-catalog-ps-<yourinitials>" -Location "eastus" -Tag @{course="azure-core-solutions"; "created-by"="powershell"}
+New-AzResourceGroup -Name "rg-catalog-ps-<yourinitials>" -Location "centralus" -Tag @{course="azure-core-solutions"; "created-by"="powershell"}
 ```
 
 **Why bother with a third tool that does the same thing?** Two reasons. First, the outline lists PowerShell alongside the CLI as one of the ways teams automate Azure — Windows-heavy shops and teams already scripting in PowerShell for other Microsoft products often standardize on it instead of Bash, and you should recognize it on sight. Second, and more important for this lab: notice what did *not* change. You did not sign in again. You did not pick a subscription again. `Get-AzContext` returned the same subscription `az account show` did back in Step 5. That is Azure Resource Manager again — a third client, the same identity, the same control plane, the same rules.
@@ -217,9 +225,9 @@ Finally, go back to the portal, open **Resource groups**, and refresh. All three
 
 ## Step 11 – Find Resources by Tag Across the Subscription
 
-So far you have checked tags one resource group at a time. Real subscriptions have thousands of resources, and nobody reads them one at a time. In the portal, search for **Tags** and open it.
+So far you have checked tags one resource group at a time. Real subscriptions have thousands of resources, and nobody reads them one at a time. In the portal, type **Tags** in the search bar and open the **Tags** service.
 
-1. Click the **course** tag.
+1. In the list of tag name/value pairs, click **course : azure-core-solutions**.
 2. You should see every resource carrying that tag listed together — all three of your resource groups, regardless of which tool created them or what they are named.
 
 **Why does this page matter more once you leave the classroom?** Because "find everything that belongs to the catalog project" or "find everything owner `js` is responsible for" are questions a real team asks constantly — during an audit, during an incident, during a cost review — and tags are the only mechanism that answers them *without* relying on naming conventions. A resource group named `rg-catalog-cli-js` tells a human what it is, but a script or a report has to parse that name and guess. A tag is structured data built for exactly this kind of query. This is the same mechanism Microsoft Cost Management and Azure Policy lean on later in the course — you are looking at its simplest form today.
@@ -293,7 +301,7 @@ az group list --output table
 Answer for yourself or discuss with a partner:
 
 1. Why did the portal, the CLI, and PowerShell all produce the same kind of resource group?
-2. Your resource group was in East US. Could you have placed a virtual machine from West Europe inside it? Why or why not?
+2. Your resource group was in Central US. Could you have placed a virtual machine from West Europe inside it? Why or why not?
 3. What is the risk of skipping the cleanup step once you start creating resources that bill?
 4. `New-AzResourceGroup` and `az group create` look nothing alike on the page. Why doesn't that difference matter to Azure Resource Manager?
 5. A budget alert emailed the team that spending crossed 80% of its threshold. Nothing stopped running. Why is that the correct behavior for a budget, and what would you reach for if you actually wanted spending to stop?

@@ -24,7 +24,7 @@ The refusal you are about to trigger is the same control-plane enforcement you h
 ```bash
 az group create \
   --name rg-governance-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 ```
 
@@ -65,7 +65,7 @@ Attempt to create a storage account in the governed resource group **without** a
 az storage account create \
   --name stnotag<yourinitials> \
   --resource-group rg-governance-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --sku Standard_LRS \
   --kind StorageV2
 ```
@@ -86,7 +86,7 @@ Now create the same storage account *with* the required tag:
 az storage account create \
   --name stnotag<yourinitials> \
   --resource-group rg-governance-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --sku Standard_LRS \
   --kind StorageV2 \
   --tags owner=<yourinitials>
@@ -188,7 +188,7 @@ Answer for yourself or discuss with a partner:
 
 Two independent challenges, pick either or both:
 
-1. **Restrict regions with policy.** Assign the built-in *"Allowed locations"* policy to your resource group, permitting only `eastus`. Then try to create a resource in `westus` and watch it be denied. Explain how region-restriction policy enforces the data-residency requirement you reasoned about on Day 1 — automatically, instead of by trusting everyone to pick the right region.
+1. **Restrict regions with policy.** Assign the built-in *"Allowed locations"* policy to your resource group, permitting only `centralus`. Then try to create a resource in `eastus` and watch it be denied. Explain how region-restriction policy enforces the data-residency requirement you reasoned about on Day 1 — automatically, instead of by trusting everyone to pick the right region.
 2. **Auto-fix instead of refuse.** Research the difference between the **Deny** and **Modify** effects for tags. Explain a scenario where you would rather the platform *add* a missing tag (with a default value) than reject the deployment — and one risk of doing so silently.
 
 (Clean up any extra assignments and resources afterward.)

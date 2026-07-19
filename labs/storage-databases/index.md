@@ -24,7 +24,7 @@ In Cloud Shell (Bash), run (use your initials):
 ```bash
 az group create \
   --name rg-data-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 ```
 
@@ -38,7 +38,7 @@ az group create \
 az storage account create \
   --name stcatalog<yourinitials> \
   --resource-group rg-data-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --sku Standard_LRS \
   --kind StorageV2 \
   --access-tier Hot
@@ -136,7 +136,7 @@ SQLPASS='Cascade2026!<pick-your-own>'
 az sql server create \
   --name sql-catalog-<yourinitials> \
   --resource-group rg-data-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --admin-user catalogadmin \
   --admin-password "$SQLPASS"
 
@@ -213,7 +213,7 @@ SELECT name, price FROM products WHERE in_stock > 20 ORDER BY price DESC;
 
 **Why did the query editor work when nothing is installed?** It runs inside the portal and connects to the database over the `AllowAzureServices` rule you added — the portal is an Azure service. It is the fastest way to run SQL against a managed database, and a nice reminder that "managed" reaches all the way to the tooling: no `sqlcmd`, no drivers, no client setup.
 
-> **Checkpoint:** The `SELECT` returns the Kayak (589.00) and the Backpack (139.50) — the two in-stock-over-20 products, most expensive first. (The Tent qualifies on stock too; confirm you understand why all three or only some appear based on the `in_stock > 20` filter.)
+> **Checkpoint:** The `SELECT` returns the **Tent (249.99)** and the **Backpack (139.50)** — the two products with stock over 20, most expensive first. The **Kayak is excluded**: its stock is only 12, so it fails the `in_stock > 20` filter (confirm you understand why, even though it is the most expensive product).
 
 ---
 

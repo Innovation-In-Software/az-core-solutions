@@ -15,7 +15,7 @@ Running through all of it is the Day 1 idea that never leaves: every one of thes
 ### Prerequisites
 
 - Completion of Day 1, or comfort with Cloud Shell, resource groups, and RBAC basics
-- An Azure account. **Some steps create Microsoft Entra ID objects** (a user, a group). This works cleanly if you own your tenant (a personal/free account). On a corporate tenant you may lack permission — each such step notes a fallback so you can still complete the lab.
+- An Azure account with **Owner** on your subscription (required to assign roles — a `Microsoft.Authorization` action). You will create a **service principal** as the analyst identity; this needs no directory-admin role, so it works on a shared class tenant.
 
 ---
 
@@ -42,71 +42,68 @@ You will almost certainly see **Owner** at the subscription scope.
 
 ---
 
-## Step 2 – Create a Group for the Analyst Role
+## Step 2 – Create the Resource Group the Analyst Will Read
 
-You could assign a role straight to the analyst, but you should not. Create a **group** first:
-
-```bash
-az ad group create --display-name "Catalog Analysts" --mail-nickname catalog-analysts
-```
-
-> **Corporate-tenant fallback:** If this returns an authorization error, you lack directory permission to create groups. Ask your instructor, or skip ahead and in Step 4 assign the role to *your own* user instead of the group — the RBAC lesson still lands.
-
-**Why assign roles to a group instead of directly to the person?** Because people change and roles endure. When the analyst leaves and a replacement starts, you add and remove them from **Catalog Analysts** — the role assignment never moves. When a second analyst joins, they inherit the exact same access by joining the group. Direct-to-person assignments are how organizations end up, years later, with hundreds of one-off grants nobody can audit. Assigning to groups keeps the answer to "who can read the catalog?" as short as "the members of this group." This is the single most important RBAC habit, and it costs one extra command today.
-
----
-
-## Step 3 – Create the Analyst User
-
-Create the user who will join the group:
-
-```bash
-TENANT_DOMAIN=$(az ad signed-in-user show --query userPrincipalName -o tsv | cut -d'@' -f2)
-
-az ad user create \
-  --display-name "Cascade Analyst" \
-  --user-principal-name "analyst@$TENANT_DOMAIN" \
-  --password 'Analyst2026!ChangeMe'
-
-az ad group member add --group "Catalog Analysts" \
-  --member-id $(az ad user show --id "analyst@$TENANT_DOMAIN" --query id -o tsv)
-```
-
-> **Corporate-tenant fallback:** If user creation is denied, you lack directory permission to create users. Skip creating the user; in Step 4, assign the role to the **Catalog Analysts** group anyway (an empty group is fine to demonstrate scoped assignment) or to your own user, and read the "test least privilege" step as a thought exercise.
-
-**Why does creating a user belong to identity administration, not resource administration?** Notice this command is `az ad ...`, not `az resource ...` or `az group ...` (resource group). It talks to **Microsoft Entra ID** — Azure's identity service (formerly Azure Active Directory) — which is a separate system from the resource hierarchy you have worked in all course. Entra ID answers *authentication* ("who are you?"); RBAC answers *authorization* ("what may you do?"). Every sign-in to the portal, every `az login`, every app calling a Microsoft API authenticates against Entra ID first, and only then does RBAC decide what the authenticated identity can touch. Keeping those two questions separate — identity here, permissions there — is why the same analyst identity can have read-only rights on one subscription and none on another.
-
-**Why the forced password and what would production add?** The temporary password is a lab shortcut. A real account would require the user to set their own on first sign-in and would sit behind **multi-factor authentication (MFA)** and **Conditional Access** — policies that demand a second factor, or block sign-in from risky locations, before the password even matters. Those features (and passwordless sign-in) are how modern identity resists the stolen-password attack that a password alone cannot. You are not configuring them here, but know that the account you just made would, in production, be only the first layer.
-
----
-
-## Step 4 – Grant Read-Only Access, Scoped to One Resource Group
-
-Create a resource group for the analyst to have access to, then grant the group the built-in **Reader** role — scoped to *only* that group:
+Create the one resource group the analyst identity will be allowed to see:
 
 ```bash
 az group create \
   --name rg-analyst-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 
 RG_ID=$(az group show --name rg-analyst-<yourinitials> --query id -o tsv)
-
-az role assignment create \
-  --assignee "$(az ad group show --group 'Catalog Analysts' --query id -o tsv)" \
-  --role "Reader" \
-  --scope "$RG_ID"
 ```
 
-> **Fallback:** if you skipped the group, replace the `--assignee` value with your own user id (`az ad signed-in-user show --query id -o tsv`).
+Keep the `RG_ID` variable — the next step grants access *scoped to exactly this group* and nothing else.
 
-**Why "Reader," and what does it deliberately withhold?** **Reader** is a built-in role that grants view access to everything in its scope and the power to change *nothing* — no create, no update, no delete. It is the purest expression of your lead's "look but not break." Azure ships dozens of built-in roles along a spectrum: **Reader** (view), **Contributor** (view + change, but not grant access), **Owner** (everything including granting access), plus job-specific roles like **Storage Blob Data Reader** or **Cost Management Reader**. You reach for the *least* powerful role that still lets the person do their job — the principle of **least privilege**.
+---
 
-**Why scope it to one resource group instead of the subscription?** Because scope is the other half of least privilege, and it is where the real damage is usually prevented. The analyst gets Reader on `rg-analyst-<yourinitials>` and *nothing at all* on the rest of the subscription — they cannot even see the other resource groups, let alone the database or storage account. Had you granted Reader at the subscription, they could read every secret-adjacent setting everywhere. Roles answer "what can they do?"; scope answers "to which resources?" Least privilege needs both dialed down. Because scope follows the Day 1 hierarchy (management group → subscription → resource group → resource), you can grant at exactly the altitude a job requires and no higher.
+## Step 3 – Create the Analyst Identity with Least-Privilege Access
 
-**Why does this rule bind the analyst no matter what tool they use?** The same reason the Day 1 lock did. This assignment lives in Azure Resource Manager. Whether the analyst opens the portal, runs the CLI, or calls the REST API, every request they make is checked against this assignment at the control plane. There is no "back door" tool that skips the check — "look but not break" is enforced once, centrally, for all front doors.
+The analyst needs a **read-only** identity. You will model it with a **service principal** — a non-human identity that a script, tool, or automation signs in as. (Creating a human *user* is a Microsoft Entra ID *directory* operation that requires the **User Administrator** directory role, which subscription Owner does not include. A service principal is an identity you *can* create as Owner, and — unlike a bare user — you can sign in as it yourself to prove least privilege in Step 7.)
 
-> **Checkpoint:** `az role assignment list --scope "$RG_ID" --query "[].{Role:roleDefinitionName, Principal:principalName}" --output table` shows the Reader assignment for the group (or your user).
+Create the service principal and grant it the built-in **Reader** role, scoped to only your resource group, in one command:
+
+```bash
+az ad sp create-for-rbac \
+  --name "sp-catalog-analyst-<yourinitials>" \
+  --role Reader \
+  --scopes "$RG_ID"
+```
+
+Copy the three values from the output — you need them in Step 7:
+
+| Field | What it is |
+|---|---|
+| `appId` | the service principal's username |
+| `password` | its secret — shown **once** (if lost, reset with `az ad sp credential reset --id <appId>`) |
+| `tenant` | your directory (tenant) ID |
+
+**What did that one command do?** It set all three parts of an RBAC grant at once: a **principal** (the service principal), a **role** (`Reader` — view everything, change nothing), at a **scope** (only `rg-analyst-<yourinitials>`). *Who can do what, where* — kept as small as the job allows. That is **least privilege**.
+
+**Why a service principal and not a user?** Because creating directory users needs an Entra role you do not hold as subscription Owner — identity administration and resource administration are separate systems. The service principal is the identity you *can* create, and it is exactly how real automation (a nightly cost report, a monitoring agent) receives scoped access. In production this credential would also be rotated and, where possible, replaced by a **managed identity** so there is no secret to leak.
+
+**A real-world habit:** for *people*, assign the role to a **group** and add each person to it, so access outlives any individual — assign to groups, not to persons. Here the analyst is a single service identity, so you grant it directly.
+
+---
+
+## Step 4 – Read the Grant Back
+
+Confirm the assignment exists and reads the way you intended:
+
+```bash
+az role assignment list --scope "$RG_ID" \
+  --query "[].{Role:roleDefinitionName, Principal:principalName, Scope:scope}" --output table
+```
+
+**Why "Reader," and what does it deliberately withhold?** **Reader** grants view access to everything in its scope and the power to change *nothing* — no create, no update, no delete. It is the purest expression of your lead's "look but not break." Azure ships built-in roles along a spectrum: **Reader** (view), **Contributor** (view + change, but not grant access), **Owner** (everything, including granting access), plus job-specific roles like **Storage Blob Data Reader** or **Cost Management Reader**. Reach for the *least* powerful role that still does the job — the principle of **least privilege**.
+
+**Why scope it to one resource group instead of the subscription?** Because scope is the other half of least privilege. The analyst identity gets Reader on `rg-analyst-<yourinitials>` and *nothing at all* on the rest of the subscription — it cannot even see the other resource groups, let alone the database or storage account. Roles answer "what can they do?"; scope answers "to which resources?" Least privilege needs both dialed down. Because scope follows the Day 1 hierarchy (management group → subscription → resource group → resource), you grant at exactly the altitude a job requires and no higher.
+
+**Why does this bind the identity no matter what tool it uses?** The same reason the Day 1 lock did. This assignment lives in Azure Resource Manager. Portal, CLI, or REST API — every request is checked against the assignment at the control plane. There is no "back door" tool that skips the check — "look but not break" is enforced once, centrally, for all front doors.
+
+> **Checkpoint:** the list shows a **Reader** assignment whose principal is your `sp-catalog-analyst-<yourinitials>`, scoped to your resource group.
 
 ---
 
@@ -118,7 +115,7 @@ Now the second half of your lead's request: get the database password out of peo
 az keyvault create \
   --name kv-catalog-<yourinitials> \
   --resource-group rg-analyst-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --enable-rbac-authorization false
 ```
 
@@ -156,37 +153,54 @@ az keyvault secret show \
 
 ---
 
-## Step 7 – (Optional but recommended) Watch Least Privilege Hold
+## Step 7 – Watch Least Privilege Hold
 
-If you created the analyst user and have a moment, prove the grant. Open a **private/incognito browser window**, go to `https://portal.azure.com`, and sign in as `analyst@<your-tenant-domain>` with the temporary password (you may be prompted to change it).
+Prove the grant by *becoming* the analyst identity. Sign in as the service principal, using the `appId`, `password`, and `tenant` you saved in Step 3:
 
-- Open **Resource groups**. The analyst sees **only** `rg-analyst-<yourinitials>` — not `rg-data`, not the others.
-- Open that group and try **Create** or **Delete**. Both are refused: Reader can look, not touch.
-- Try to open the Key Vault's secret. Even inside the one group they can read, the secret's *data* is gated separately — they were never granted secret access.
+```bash
+az login --service-principal \
+  --username <appId> \
+  --password <password> \
+  --tenant <tenant>
+```
 
-**Why is this the proof that matters?** Because a permission you have not tested is a permission you are only guessing about. Watching the analyst *fail* to create, delete, or read secrets — while succeeding at viewing — is the difference between "I think least privilege is configured" and "I have seen it hold." Security work lives or dies on that distinction. Close the private window when done.
+Now **read** the resource group it was granted — this succeeds:
 
-> **Checkpoint:** The analyst can view one resource group and change nothing, anywhere.
+```bash
+az group show --name rg-analyst-<yourinitials> --output table
+```
+
+Then try to **change** something in that group — this is refused:
+
+```bash
+az storage account create \
+  --name stdenied<yourinitials> \
+  --resource-group rg-analyst-<yourinitials> \
+  --location centralus --sku Standard_LRS
+```
+
+Expected: an **`AuthorizationFailed`** error naming the missing write permission. The identity has `Reader`, so it can look but not touch. When done, return to your own identity by clicking the Cloud Shell **restart** (power) icon, or run `az login`.
+
+> **Note:** a brand-new service principal can take a minute or two to become usable for sign-in. In practice Steps 4–6 fill that gap, so by the time you reach this step it should just work; if the login fails immediately, wait a minute and retry.
+
+**Why is this the proof that matters?** Because a permission you have not tested is a permission you are only guessing about. Watching the identity *succeed* at reading and *fail* at writing — at the control plane, whatever the tool — is the difference between "I think least privilege is configured" and "I have seen it hold." Security work lives or dies on that distinction.
+
+> **Checkpoint:** signed in as the service principal, the read succeeds and the write is refused with `AuthorizationFailed`.
 
 ---
 
 ## Step 8 – Clean Up
 
-Remove the resources, the role assignment, and the identity objects:
+First make sure you are signed back in as **yourself**, not the service principal (restart Cloud Shell or `az login` if you have not already). Then remove the resource group and the identity you created:
 
 ```bash
 az group delete --name rg-analyst-<yourinitials> --yes --no-wait
 
-# Re-derive the tenant domain in case this is a new Cloud Shell session
-TENANT_DOMAIN=$(az ad signed-in-user show --query userPrincipalName -o tsv | cut -d'@' -f2)
-
-az ad group delete --group "Catalog Analysts"
-az ad user delete --id "analyst@$TENANT_DOMAIN"
+# The service principal lives in the directory, not the resource group — delete it explicitly:
+az ad app delete --id <appId>
 ```
 
-> Skip the `az ad` lines for any object you did not create. Deleting the resource group removes the Key Vault and the role assignment scoped to it automatically.
-
-**Why does deleting the resource group also clear the role assignment, but not the group and user?** Because the role assignment was *scoped to* that resource group — it is part of the group's governance and dies with it. The Entra ID user and group, though, live in the **directory**, not in any resource group or even any subscription. That is the same separation from Step 3: identity is its own system. Resource cleanup does not touch it, so identity objects need their own explicit deletion. Forgetting this is how directories accumulate orphaned test accounts for years — a small governance mess that is also a security one, since every stale account is a possible way in.
+**Why delete the service principal separately?** Deleting the resource group removes the Key Vault and the Reader assignment scoped to it automatically — but the service principal lives in the **directory**, not in any resource group or subscription. Identity is its own system: resource cleanup does not touch it, so directory objects need their own explicit deletion. Forgetting this is how directories accumulate orphaned identities for years — a governance mess that is also a security one, since every stale credential is a possible way in.
 
 ---
 
@@ -197,7 +211,8 @@ az ad user delete --id "analyst@$TENANT_DOMAIN"
 | **Microsoft Entra ID** | Azure's identity system; answers *authentication* — who you are — separately from the resource hierarchy |
 | **Authentication vs authorization** | Entra ID proves who you are; RBAC decides what you may do |
 | **Principal / role / scope** | The three-part core of RBAC: *who* can do *what*, *where* |
-| **Groups over people** | Assign roles to groups so access outlives any individual and stays auditable |
+| **Service principal** | A non-human identity for tools/automation — created here as the analyst, granted scoped Reader, and signed in as to prove least privilege |
+| **Groups over people** | For human teams, assign roles to groups so access outlives any individual and stays auditable |
 | **Built-in roles** | Reader, Contributor, Owner, and job-specific roles along a least-to-most-power spectrum |
 | **Least privilege** | Grant the weakest role at the narrowest scope that still does the job |
 | **Key Vault** | An access-controlled, audited home for secrets, keys, and certificates |
@@ -211,10 +226,10 @@ az ad user delete --id "analyst@$TENANT_DOMAIN"
 Answer for yourself or discuss with a partner:
 
 1. You gave the analyst Reader on one resource group, not Contributor on the subscription. Name the two independent dials you turned down, and what each one prevented.
-2. Why assign the Reader role to a group rather than directly to the analyst, when there is only one analyst today?
+2. You granted the single service identity Reader directly. For a team of *people*, why would you instead assign the role to a **group** and add members to it?
 3. The connection string looked identical in a shell variable and in Key Vault. What actually became safer, and for whom?
 4. Being subscription Owner did not automatically let you read a Key Vault's secret contents under the RBAC model. Explain the control-plane-vs-data-plane distinction in your own words.
-5. Deleting the resource group removed the role assignment but not the analyst user. Why, and what cleanup habit does that imply?
+5. Deleting the resource group removed the role assignment but not the service principal. Why, and what cleanup habit does that imply?
 
 ---
 
@@ -223,7 +238,7 @@ Answer for yourself or discuss with a partner:
 Two independent challenges, pick either or both:
 
 1. **Feel the RBAC data-plane model.** Create a second Key Vault with `--enable-rbac-authorization true`. Try `az keyvault secret set` on it immediately — it fails, because being Owner does not grant *data* access under the RBAC model. Grant yourself the **Key Vault Secrets Officer** role at the vault's scope (`az role assignment create --role "Key Vault Secrets Officer" --scope <vault-id> --assignee <your-id>`), wait a minute for propagation, and try again. Explain why this friction is, counterintuitively, a security feature.
-2. **Build a custom least-privilege story.** Suppose the analyst also needs to read *costs* but still nothing else. Find the built-in **Cost Management Reader** role and add it to the Catalog Analysts group at the subscription scope, while keeping resource Reader at only the one resource group. Explain how combining two narrow roles beats one broad one.
+2. **Build a custom least-privilege story.** Suppose the analyst also needs to read *costs* but still nothing else. Assign the built-in **Cost Management Reader** role to the service principal at the **subscription** scope (`az role assignment create --assignee <appId> --role "Cost Management Reader" --scope /subscriptions/<sub-id>`), while keeping resource **Reader** at only the one resource group. Explain how combining two narrow roles beats one broad one.
 
 (Clean up any extra resources, role assignments, and identity objects afterward.)
 

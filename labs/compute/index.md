@@ -28,7 +28,7 @@ In Cloud Shell (Bash), run (use your initials):
 ```bash
 az group create \
   --name rg-compute-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 ```
 
@@ -77,7 +77,7 @@ az vm create \
   --resource-group rg-compute-<yourinitials> \
   --name vm-catalog \
   --image Ubuntu2204 \
-  --size Standard_B1s \
+  --size Standard_D2s_v3 \
   --admin-username azureuser \
   --generate-ssh-keys \
   --custom-data cloud-init.yaml
@@ -88,11 +88,11 @@ This takes two to four minutes. While it runs, read the flags — every one is a
 | Flag | The decision | Why it matters |
 |---|---|---|
 | `--image Ubuntu2204` | Which operating system | In IaaS, the OS is yours: yours to choose, yours to patch, yours to upgrade when it goes end-of-life |
-| `--size Standard_B1s` | How much CPU and memory | B-series is a small, inexpensive "burstable" size — right for a lab, wrong for a busy production site. Sizing is your job in IaaS |
+| `--size Standard_D2s_v3` | How much CPU and memory | A small general-purpose size (2 vCPUs) — right for a lab, wrong for a busy production site. Sizing is your job in IaaS |
 | `--admin-username` / `--generate-ssh-keys` | How you log in | Keys are generated if you have none, and the public key is placed on the VM. Password logins are weaker; keys are the norm |
 | `--custom-data cloud-init.yaml` | What the server becomes | Your Step 2 file, injected at first boot |
 
-> **Note:** If the command reports the size is unavailable or quota is exceeded in your region, delete the resource group (`az group delete --name rg-compute-<yourinitials> --yes`), recreate it in another region such as `westus2`, and rerun from Step 1 — a failed VM create often leaves partial networking resources behind that will conflict with a retry in a different region. Or ask your instructor.
+> **Note:** If the command reports the size is unavailable or quota is exceeded in your region, delete the resource group (`az group delete --name rg-compute-<yourinitials> --yes`), recreate it in another region such as `westus3`, and rerun from Step 1 — a failed VM create often leaves partial networking resources behind that will conflict with a retry in a different region. Or ask your instructor.
 
 **What did Azure create besides the VM?** When it finishes, run `az resource list --resource-group rg-compute-<yourinitials> --output table`. You will see roughly six resources: the VM, a disk, a network interface, a public IP address, a network security group — and a **virtual network** the CLI quietly created to put it all in. A "virtual machine" is really a small bundle: compute, storage, and networking are separate resources wired together. Today the CLI chose sensible defaults for that wiring; the networking lab takes direct control of it, starting with that quietly-created network.
 
@@ -158,7 +158,7 @@ The slides drew a line between two kinds of scaling: **vertical** (a bigger mach
 
 ```bash
 az vm deallocate --resource-group rg-compute-<yourinitials> --name vm-catalog
-az vm resize --resource-group rg-compute-<yourinitials> --name vm-catalog --size Standard_B2s
+az vm resize --resource-group rg-compute-<yourinitials> --name vm-catalog --size Standard_D4s_v3
 az vm start --resource-group rg-compute-<yourinitials> --name vm-catalog
 ```
 
@@ -168,7 +168,7 @@ Confirm the new size:
 az vm show --resource-group rg-compute-<yourinitials> --name vm-catalog --query hardwareProfile.vmSize --output tsv
 ```
 
-**Why deallocate before resizing?** A running VM occupies specific physical hardware sized to fit its current CPU and memory footprint. Resizing to `Standard_B2s` (double the vCPUs and memory of your `Standard_B1s`) may need to move the VM to different hardware, and Azure will not do that out from under a running OS. `deallocate` releases the VM (and stops billing for compute — only the disk keeps its small storage charge while stopped), `resize` changes the specification ARM stores for it, and `start` boots it again, this time provisioned against the new size. The whole cycle takes a minute or two.
+**Why deallocate before resizing?** A running VM occupies specific physical hardware sized to fit its current CPU and memory footprint. Resizing to `Standard_D4s_v3` (double the vCPUs and memory of your `Standard_D2s_v3`) may need to move the VM to different hardware, and Azure will not do that out from under a running OS. `deallocate` releases the VM (and stops billing for compute — only the disk keeps its small storage charge while stopped), `resize` changes the specification ARM stores for it, and `start` boots it again, this time provisioned against the new size. The whole cycle takes a minute or two.
 
 **Why is this "vertical scaling," and why does the slide deck warn it is not the whole answer?** You just made *this one machine* bigger — more CPU, more memory, same single point of failure. It is the fastest way to buy headroom, and it is also a dead end: there is a largest VM size, and even before you reach it, a single bigger machine still goes down for the minutes it takes to resize, as you just watched with `deallocate`/`start`. **Horizontal** scaling — more machines behind a load balancer — is what actually gets you *elasticity* (capacity that grows and shrinks with demand, no restart required) and survives a single machine failing. You will build the horizontal pattern with a load balancer in the networking lab. Today, notice the trade you just made: `az vm resize` is one command, but it bought you a bigger single point of failure, not a more resilient one.
 
@@ -178,7 +178,7 @@ Curl the site once more to confirm nothing else changed:
 curl http://<the-ip-address>
 ```
 
-**Checkpoint:** `hardwareProfile.vmSize` reports `Standard_B2s`, and the catalog page still loads — same server, same content, more room underneath it.
+**Checkpoint:** `hardwareProfile.vmSize` reports `Standard_D4s_v3`, and the catalog page still loads — same server, same content, more room underneath it.
 
 ---
 
@@ -214,7 +214,7 @@ az webapp up \
   --name catalog-<yourinitials>-<3digits> \
   --resource-group rg-compute-<yourinitials> \
   --plan plan-catalog-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --sku F1 \
   --html
 ```
@@ -264,14 +264,14 @@ A function app needs a storage account behind it (to manage triggers and logs) a
 az storage account create \
   --name stfunc<yourinitials> \
   --resource-group rg-compute-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --sku Standard_LRS
 
 az functionapp create \
   --resource-group rg-compute-<yourinitials> \
-  --consumption-plan-location eastus \
+  --consumption-plan-location centralus \
   --runtime node \
-  --runtime-version 20 \
+  --runtime-version 24 \
   --functions-version 4 \
   --name func-catalog-<yourinitials> \
   --storage-account stfunc<yourinitials>

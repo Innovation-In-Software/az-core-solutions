@@ -53,7 +53,7 @@ Internet
 ```bash
 az group create \
   --name rg-network-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 ```
 
@@ -188,7 +188,7 @@ az vm create \
   --resource-group rg-network-<yourinitials> \
   --name vm-web \
   --image Ubuntu2204 \
-  --size Standard_B1s \
+  --size Standard_D2s_v3 \
   --vnet-name vnet-catalog \
   --subnet snet-web \
   --nsg "" \
@@ -204,7 +204,7 @@ az vm create \
   --resource-group rg-network-<yourinitials> \
   --name vm-data \
   --image Ubuntu2204 \
-  --size Standard_B1s \
+  --size Standard_D2s_v3 \
   --vnet-name vnet-catalog \
   --subnet snet-data \
   --nsg "" \
@@ -213,7 +213,7 @@ az vm create \
   --generate-ssh-keys
 ```
 
-> **Note:** If a size or capacity error appears, add `--location westus2` to the group in Step 2 and rebuild, or ask your instructor.
+> **Note:** If a size or capacity error appears, add `--location westus3` to the group in Step 2 and rebuild, or ask your instructor.
 
 **Why `--nsg ""`?** Left to itself, `az vm create` makes a fresh NSG for each VM's network interface — that is the "quietly created" behavior from the last lab. The empty string says: create no NIC-level NSG; this network is governed at the subnet, where we put the rules on purpose. One layer of rules, in one predictable place.
 
@@ -370,11 +370,11 @@ az network asg create --resource-group rg-network-<yourinitials> --name asg-web
 az network nic ip-config update \
   --resource-group rg-network-<yourinitials> \
   --nic-name vm-webVMNic \
-  --name ipconfig1 \
+  --name ipconfigvm-web \
   --application-security-groups asg-web
 ```
 
-> **Note:** If `vm-webVMNic` is not the exact NIC name, find it first with `az vm show --resource-group rg-network-<yourinitials> --name vm-web --query "networkProfile.networkInterfaces[0].id" --output tsv` and take the last path segment.
+> **Note:** If `vm-webVMNic` is not the exact NIC name, find it first with `az vm show --resource-group rg-network-<yourinitials> --name vm-web --query "networkProfile.networkInterfaces[0].id" --output tsv` and take the last path segment. The IP-configuration name defaults to `ipconfig<vmname>` (so `ipconfigvm-web` here); if yours differs, look it up with `az network nic show --resource-group rg-network-<yourinitials> --name vm-webVMNic --query "ipConfigurations[0].name" --output tsv`.
 
 Now replace the CIDR-based rule with an ASG-based one:
 
@@ -428,7 +428,7 @@ packages:
   - nginx
 runcmd:
   - systemctl enable --now nginx
-  - echo "<h1>Cascade Outfitters - Web Tier</h1><p>Served by: $(hostname)</p>" > /var/www/html/index.html
+  - 'echo "<h1>Cascade Outfitters - Web Tier</h1><p>Served by: $(hostname)</p>" > /var/www/html/index.html'
 EOF
 ```
 
@@ -439,7 +439,7 @@ az vm create \
   --resource-group rg-network-<yourinitials> \
   --name vm-web2 \
   --image Ubuntu2204 \
-  --size Standard_B1s \
+  --size Standard_D2s_v3 \
   --vnet-name vnet-catalog \
   --subnet snet-web \
   --nsg "" \
@@ -457,7 +457,7 @@ Add `vm-web2` to the `asg-web` group you created in Step 9, so it inherits the s
 az network nic ip-config update \
   --resource-group rg-network-<yourinitials> \
   --nic-name vm-web2VMNic \
-  --name ipconfig1 \
+  --name ipconfigvm-web2 \
   --application-security-groups asg-web
 ```
 
@@ -483,14 +483,14 @@ az network lb create \
 az network nic ip-config address-pool add \
   --resource-group rg-network-<yourinitials> \
   --nic-name vm-webVMNic \
-  --ip-config-name ipconfig1 \
+  --ip-config-name ipconfigvm-web \
   --lb-name lb-catalog \
   --address-pool web-pool
 
 az network nic ip-config address-pool add \
   --resource-group rg-network-<yourinitials> \
   --nic-name vm-web2VMNic \
-  --ip-config-name ipconfig1 \
+  --ip-config-name ipconfigvm-web2 \
   --lb-name lb-catalog \
   --address-pool web-pool
 

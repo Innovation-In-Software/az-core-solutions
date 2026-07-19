@@ -109,7 +109,7 @@ Now for your lead's second question. In Cloud Shell, run (use your initials):
 ```bash
 az group create \
   --name rg-catalog-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials> cost-center=retail-web
 ```
 
@@ -155,13 +155,13 @@ Create a second resource group and a trivial, free-tier resource inside your fir
 ```bash
 az group create \
   --name rg-catalog-archive-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --tags project=catalog environment=dev owner=<yourinitials>
 
 az storage account create \
   --name stcatalog<yourinitials> \
   --resource-group rg-catalog-<yourinitials> \
-  --location eastus \
+  --location centralus \
   --sku Standard_LRS \
   --kind StorageV2
 ```
