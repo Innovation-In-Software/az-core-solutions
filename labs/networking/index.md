@@ -25,21 +25,21 @@ Here is the target. Keep it visible — every command that follows creates one p
 
 ```
 Internet
-   │
-   │  allowed: port 80 (HTTP), port 22 (SSH, for the lab)
-   ▼
-┌─────────────────────────────────────────────────────┐
-│  vnet-catalog          10.20.0.0/16                 │
-│                                                     │
-│  ┌──────────────────────┐  ┌──────────────────────┐ │
-│  │ snet-web             │  │ snet-data            │ │
-│  │ 10.20.1.0/24         │  │ 10.20.2.0/24         │ │
-│  │ [nsg-web]            │  │ [nsg-data]           │ │
-│  │                      │  │                      │ │
-│  │  vm-web              │──▶  vm-data             │ │
-│  │  (public IP)         │  │  (NO public IP)      │ │
-│  └──────────────────────┘  └──────────────────────┘ │
-└─────────────────────────────────────────────────────┘
+   |
+   |  allowed: port 80 (HTTP), port 22 (SSH, for the lab)
+   v
++-------------------------------------------------------+
+|  vnet-catalog          10.20.0.0/16                   |
+|                                                       |
+|  +----------------------+  +----------------------+   |
+|  | snet-web             |  | snet-data            |   |
+|  | 10.20.1.0/24         |  | 10.20.2.0/24         |   |
+|  | [nsg-web]            |  | [nsg-data]           |   |
+|  |                      |  |                      |   |
+|  |  vm-web       -----> |  |  vm-data             |   |
+|  |  (public IP)         |  |  (NO public IP)      |   |
+|  +----------------------+  +----------------------+   |
++-------------------------------------------------------+
 ```
 
 **Why a /16 for the VNet and /24s for the subnets?** The VNet's address space (`10.20.0.0/16` — about 65,000 addresses) is the total private range this network owns; each subnet carves out a /24 slice (about 250 usable addresses). This is deliberately roomy: address spaces are painful to change later, and adding a *third* subnet tomorrow (say, a management tier) should be a carve-out, not a redesign. Plan the space bigger than the project.
