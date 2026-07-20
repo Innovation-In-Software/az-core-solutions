@@ -3,6 +3,7 @@
 This site includes the labs for the Azure Core Solutions class.
 
 ## Labs
+[Azure accounts](https://docs.google.com/spreadsheets/d/1ckalqHN_cG3h1FGdbZIBtcVakaFrdBIeVT9HLbpyyuM/edit?usp=sharing)   
 
 ### Day 1
 Lab 1: [Azure First Steps – The Portal, Cloud Shell, and Your First Resource](labs/azure-first-steps/index.md)   
