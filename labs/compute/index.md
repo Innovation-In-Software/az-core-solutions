@@ -247,8 +247,10 @@ func new --name CatalogLookup --template "HTTP trigger" --authlevel anonymous
 Open the generated function and see what it contains:
 
 ```bash
-cat CatalogLookup/index.js
+cat src/functions/CatalogLookup.js
 ```
+
+> **Note:** Current Core Tools scaffold the **v4 Node programming model**, which puts each function in `src/functions/<name>.js` and defines its trigger in code — there is no per-function folder and no `function.json`. (Older Core Tools used the v3 layout, `CatalogLookup/index.js` with a separate `function.json`.) If the `cat` above says "No such file," run `find . -name '*.js' -not -path '*/node_modules/*'` to see where your version put it.
 
 **What did `func init` and `func new` just do?** `func init` scaffolded a function app project — a small folder structure Azure Functions knows how to run, comparable to what `az webapp up` deployed for you invisibly in Step 8. `func new` added one function to it, triggered by an HTTP request, and wrote a working handler that reads a `name` query parameter and returns a greeting. Notice there is no web server in this code, no listening socket, no port binding — the trigger and the runtime that answers HTTP requests are the platform's job, not yours. You wrote a function; Azure Functions supplies everything around it.
 
@@ -291,7 +293,7 @@ The command prints an **Invoke URL** when it finishes — for an anonymous funct
 curl "<the-invoke-url>?name=Catalog"
 ```
 
-You should get back `Hello, Catalog. This HTTP triggered function executed successfully.` or similar.
+You should get back a greeting containing the name you passed — with the v4 model template it is `Hello, Catalog!` (older templates return a longer sentence like `Hello, Catalog. This HTTP triggered function executed successfully.`). Either way, seeing your `name` reflected back confirms the function ran.
 
 > **Note:** Start the parameter with `?`, not `&`. Use `&` only to add a *second* parameter to a URL that already has a `?`. If you created the function with function-level auth instead of `anonymous`, the invoke URL would already end in `?code=...`, and only then would you append `&name=Catalog`.
 
@@ -401,7 +403,7 @@ Two independent challenges, pick either or both:
 
 1. Redeploy the App Service page with a visible change: edit `index.html` (add a product list), then run the same `az webapp up` command again from the `catalog-site` folder and refresh the browser. Time it. Then estimate: what would the same content change have required on the VM path? This gap — seconds versus a login-edit-verify cycle — is why teams that ship frequently gravitate toward PaaS and automation.
 
-2. Edit `CatalogLookup/index.js` in the Functions project to change the response message, then run `func azure functionapp publish func-catalog-<yourinitials>` again and re-test the Invoke URL. Time this redeploy too, and compare it against both of the others. Then check the **Monitor** tab on your function in the portal (search **Function App**, open `func-catalog-<yourinitials>`, open `CatalogLookup`, then **Monitor**) — you should see one logged execution per request you made. This is the billing unit for serverless made visible: not server-hours, but individual invocations.
+2. Edit `src/functions/CatalogLookup.js` in the Functions project (or `CatalogLookup/index.js` on the older v3 layout) to change the response message, then run `func azure functionapp publish func-catalog-<yourinitials>` again and re-test the Invoke URL. Time this redeploy too, and compare it against both of the others. Then check the **Monitor** tab on your function in the portal (search **Function App**, open `func-catalog-<yourinitials>`, open `CatalogLookup`, then **Monitor**) — you should see one logged execution per request you made. This is the billing unit for serverless made visible: not server-hours, but individual invocations.
 
 (If you attempt either, remember cleanup afterward.)
 
