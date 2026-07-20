@@ -310,26 +310,9 @@ Answer for yourself or discuss with a partner:
 
 ## Optional Challenge
 
-Create one more resource group in **Central US**, this time applying **two tags in a single command** — `course` and `owner` — using either the CLI or PowerShell (pick the one you'd like more practice with):
+Create one more resource group in **Central US**, this time applying **two tags in a single command** — `course` and `owner` — using either the CLI or PowerShell (pick the one you'd like more practice with). Then read the tags back to confirm both landed, using a query rather than scrolling the full output. Delete the group when you are done.
 
-```bash
-# CLI
-az group create --name rg-challenge-<yourinitials> --location centralus --tags course=azure-core-solutions owner=<yourinitials>
-```
-
-```powershell
-# PowerShell
-New-AzResourceGroup -Name "rg-challenge-<yourinitials>" -Location "centralus" -Tag @{course="azure-core-solutions"; owner="<yourinitials>"}
-```
-
-Then read the tags back to confirm both landed, using a query:
-
-- CLI: `az group show --name rg-challenge-<yourinitials> --query tags`
-- PowerShell: `(Get-AzResourceGroup -Name "rg-challenge-<yourinitials>").Tags`
-
-Delete the group when you are done (`az group delete --name rg-challenge-<yourinitials> --yes --no-wait`).
-
-If you finish early, run `az group list --output json` and compare it to the `--output table` view you used earlier — find three properties the table was hiding from you.
+If you finish early, list your resource groups as JSON instead of a table and compare the two — find three properties the table view was hiding from you.
 
 ---
 
