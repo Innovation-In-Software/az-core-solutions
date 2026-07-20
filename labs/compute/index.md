@@ -54,7 +54,7 @@ write_files:
       <html>
         <head><title>Cascade Outfitters Catalog</title></head>
         <body style="font-family: sans-serif; margin: 3em;">
-          <h1>Cascade Outfitters – Product Catalog</h1>
+          <h1>Cascade Outfitters - Product Catalog</h1>
           <p>Served from an <strong>Azure Virtual Machine</strong> (IaaS).</p>
           <p>Someone on our team patches this OS. That someone is us.</p>
         </body>
@@ -193,7 +193,7 @@ cat > index.html << 'EOF'
 <html>
   <head><title>Cascade Outfitters Catalog</title></head>
   <body style="font-family: sans-serif; margin: 3em;">
-    <h1>Cascade Outfitters – Product Catalog</h1>
+    <h1>Cascade Outfitters - Product Catalog</h1>
     <p>Served from <strong>Azure App Service</strong> (PaaS).</p>
     <p>Nobody on our team patches this OS. That is the point.</p>
   </body>

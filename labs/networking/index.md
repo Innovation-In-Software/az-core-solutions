@@ -173,7 +173,7 @@ write_files:
   - path: /var/www/html/index.html
     content: |
       <html><body style="font-family: sans-serif; margin: 3em;">
-        <h1>Cascade Outfitters – Web Tier</h1>
+        <h1>Cascade Outfitters - Web Tier</h1>
         <p>Reachable from the internet on port 80. Nothing else is.</p>
       </body></html>
 runcmd:
