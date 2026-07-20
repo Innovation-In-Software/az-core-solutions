@@ -558,6 +558,8 @@ Your two-subnet design, now with a load balancer and an ASG in it, is the skelet
 
 ## Step 12 – Clean Up
 
+> **Trying the Optional Challenge below? Do it first.** It runs tests from `vm-web` against `nsg-data`, so those resources must still exist — run the challenge *before* this cleanup.
+
 Three running VMs bill by the hour, plus the load balancer's public IP. One group holds everything:
 
 ```bash
@@ -607,6 +609,8 @@ Answer for yourself or discuss with a partner:
 ---
 
 ## Optional Challenge
+
+> **Do this before the Clean Up step (Step 12).** It reuses `vm-web` and `nsg-data` from this lab, so they must still exist. If you already deleted the resource group, you would have to rebuild from Steps 2–8 first.
 
 A real catalog database listens on a database port — say TCP **5432** (PostgreSQL) — not port 22. Two exercises:
 

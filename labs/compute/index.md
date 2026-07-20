@@ -347,6 +347,8 @@ You deployed three points on the spectrum yourself, but the Azure compute menu i
 
 ## Step 13 – Clean Up (Not Optional Today)
 
+> **Trying the Optional Challenge below? Do it first.** It reuses the App Service app (and Function) you just built, so run the challenge *before* this cleanup — once the resource group is deleted, those resources are gone.
+
 This is the first lab where skipping cleanup costs real money — the VM bills every hour it exists, page or no page. Everything lives in one resource group, so one command ends it:
 
 ```bash
@@ -398,6 +400,8 @@ Answer for yourself or discuss with a partner:
 ---
 
 ## Optional Challenge
+
+> **Do these before the Clean Up step (Step 13).** Both reuse resources from this lab — your App Service app and your Function — so they must still exist. If you already deleted the resource group, you would have to redeploy from Steps 7–10 first.
 
 Two independent challenges, pick either or both:
 
