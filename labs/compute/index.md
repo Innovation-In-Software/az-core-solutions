@@ -285,13 +285,15 @@ Now publish your code to it:
 func azure functionapp publish func-catalog-<yourinitials>
 ```
 
-The command prints an **Invoke URL** when it finishes. Test it, adding your own name to the query string:
+The command prints an **Invoke URL** when it finishes — for an anonymous function it looks like `https://func-catalog-<yourinitials>.azurewebsites.net/api/cataloglookup`, with no query string on the end. Test it by adding a `name` query parameter with **`?`** (a query string always starts with `?`):
 
 ```bash
-curl "<the-invoke-url>&name=Catalog"
+curl "<the-invoke-url>?name=Catalog"
 ```
 
 You should get back `Hello, Catalog. This HTTP triggered function executed successfully.` or similar.
+
+> **Note:** Start the parameter with `?`, not `&`. Use `&` only to add a *second* parameter to a URL that already has a `?`. If you created the function with function-level auth instead of `anonymous`, the invoke URL would already end in `?code=...`, and only then would you append `&name=Catalog`.
 
 **Why did this deployment need a storage account when App Service did not?** Because Functions' billing and scaling model depends on tracking function state and logs outside of any single running instance — there is no "instance" sitting idle between requests the way there is with a VM or an App Service worker. The storage account is where that bookkeeping lives. It is a small, structural cost of getting the "billed only while running" model, not a design choice you can skip.
 
