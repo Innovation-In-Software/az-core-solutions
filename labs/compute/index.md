@@ -403,7 +403,7 @@ Two independent challenges, pick either or both:
 
 1. Redeploy the App Service page with a visible change: edit `index.html` (add a product list), then run the same `az webapp up` command again from the `catalog-site` folder and refresh the browser. Time it. Then estimate: what would the same content change have required on the VM path? This gap — seconds versus a login-edit-verify cycle — is why teams that ship frequently gravitate toward PaaS and automation.
 
-2. Edit `src/functions/CatalogLookup.js` in the Functions project (or `CatalogLookup/index.js` on the older v3 layout) to change the response message, then run `func azure functionapp publish func-catalog-<yourinitials>` again and re-test the Invoke URL. Time this redeploy too, and compare it against both of the others. Then check the **Monitor** tab on your function in the portal (search **Function App**, open `func-catalog-<yourinitials>`, open `CatalogLookup`, then **Monitor**) — you should see one logged execution per request you made. This is the billing unit for serverless made visible: not server-hours, but individual invocations.
+2. Edit `src/functions/CatalogLookup.js` in the Functions project to change the response message, then run `func azure functionapp publish func-catalog-<yourinitials>` again and re-test the Invoke URL. Time this redeploy too, and compare it against both of the others. Then check the **Monitor** tab on your function in the portal (search **Function App**, open `func-catalog-<yourinitials>`, open `CatalogLookup`, then **Monitor**) — you should see one logged execution per request you made. This is the billing unit for serverless made visible: not server-hours, but individual invocations.
 
 (If you attempt either, remember cleanup afterward.)
 
