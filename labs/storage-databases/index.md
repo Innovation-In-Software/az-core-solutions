@@ -133,6 +133,10 @@ Pick a strong admin password and create a logical SQL server, then a database on
 ```bash
 SQLPASS='Cascade2026!<pick-your-own>'
 
+# Register the SQL provider. This can take a few minutes to complete. 
+
+az provider register --namespace Microsoft.Sql
+
 az sql server create \
   --name sql-catalog-<yourinitials> \
   --resource-group rg-data-<yourinitials> \
