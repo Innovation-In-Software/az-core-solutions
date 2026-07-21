@@ -269,17 +269,6 @@ Answer for yourself or discuss with a partner:
 
 ---
 
-## Optional Challenge
-
-Two independent challenges, pick either or both:
-
-1. **Automate tiering with a lifecycle policy.** Instead of moving blobs by hand, create a lifecycle management rule that moves any blob untouched for 30 days to Cool and one untouched for 90 days to Archive. In the portal: open the storage account → **Lifecycle management** → add a rule. Explain why this is better governance than manual tiering across ten thousand product images.
-2. **Share one image safely with a SAS token.** Generate a read-only, time-limited **SAS (Shared Access Signature)** URL for `kayak.jpg` (`az storage blob generate-sas ... --permissions r --expiry <date> --full-uri`), open it in a browser, and note that it stops working after expiry. Explain how a SAS is safer than handing someone the account connection string — and connect that to why the next lab moves secrets into Key Vault.
-
-(Clean up afterward if you created new resources.)
-
----
-
 ## Conclusion
 
 You solved your lead's two-part problem the way a cloud engineer is supposed to: not "where do I put the files," but "what *shape* is each piece of data, how durable must it be, and what will it cost to keep." Images went to blob storage with a redundancy SKU and an access tier chosen on purpose; records went to a managed SQL database you queried without ever touching a server. The empty data tier from the networking lab now holds something real.
