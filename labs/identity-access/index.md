@@ -111,6 +111,11 @@ az role assignment list --scope "$RG_ID" \
 
 Now the second half of your lead's request: get the database password out of people's heads. Create a **Key Vault**:
 
+Enable the Azure Key Vault provider 
+```bash
+az provider register --namespace Microsoft.KeyVault
+```
+
 ```bash
 az keyvault create \
   --name kv-catalog-<yourinitials> \

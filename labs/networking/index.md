@@ -10,7 +10,7 @@ This lab builds that design from scratch. You will create a virtual network with
 
 This is the pattern behind almost every real deployment in Azure. Learn it once with two VMs and you will recognize it in systems with two hundred.
 
-> **Cost note:** This lab runs three small VMs (two web, one data), a few cents per hour total. Step 10 also adds a Standard-SKU load balancer and a Standard-SKU public IP, which each carry a small hourly charge (unlike the free Basic tier used elsewhere) — still pennies for the length of a class, but the most expensive per-hour items in these four labs. Everything is deleted in the cleanup step. Do not skip cleanup.
+> **Cost note:** This lab runs three small VMs (two web, one data), a few cents per hour total. Step 10 also adds a Standard-SKU load balancer, a NAT gateway, and two Standard-SKU public IPs (one for the load balancer, one for the NAT gateway), which each carry a small hourly charge (unlike the free Basic tier used elsewhere) — still pennies for the length of a class, but the most expensive per-hour items in these four labs. Everything is deleted in the cleanup step. Do not skip cleanup.
 
 ### Prerequisites
 
@@ -416,7 +416,34 @@ exit
 
 Right now the web tier is one VM with one public IP — if `vm-web` goes down, the catalog site goes down with it, no matter how well-designed the NSGs around it are. Fix the actual availability problem: add a second web VM and a load balancer in front of both.
 
-First, a small change to the cloud-init file so each VM's page identifies itself — useful for proving the load balancer is really splitting traffic:
+### First, give the web subnet reliable outbound with a NAT gateway
+
+Before adding a VM that has **no public IP**, you have to solve a problem that will otherwise bite you silently. `vm-web` was able to install nginx at first boot because its public IP gave it outbound internet access to reach the package mirrors. `vm-web2` will have no public IP — and a VM with no public IP has **no reliable outbound internet by default** (Azure is actively retiring the old implicit "default outbound access"). So `vm-web2`'s cloud-init would try to `apt install nginx`, fail to reach the mirrors, and never start the web server. The load balancer's health probe would then mark it unhealthy, and you would spend an hour wondering why only one VM ever answers.
+
+The production answer is a **NAT gateway**: one shared outbound path for every machine in the subnet, no per-VM public IP required. Create one and attach it to `snet-web`:
+
+```bash
+az network public-ip create \
+  --resource-group rg-network-<yourinitials> \
+  --name pip-nat \
+  --sku Standard --allocation-method Static
+
+az network nat gateway create \
+  --resource-group rg-network-<yourinitials> \
+  --name nat-web \
+  --public-ip-addresses pip-nat \
+  --idle-timeout 10
+
+az network vnet subnet update \
+  --resource-group rg-network-<yourinitials> \
+  --vnet-name vnet-catalog \
+  --name snet-web \
+  --nat-gateway nat-web
+```
+
+**Why a NAT gateway instead of just giving `vm-web2` a public IP?** Because the two solve different directions of traffic, and you only want one of them. A NAT gateway provides **outbound-only** internet: machines in the subnet can reach *out* (to install packages, pull updates, call APIs), but nothing on the internet can initiate a connection *in*. That is exactly what a load-balancer backend wants — it needs to provision and update itself, but it must stay unreachable from the internet except through the load balancer. Giving `vm-web2` a public IP would fix outbound too, but it would also punch an inbound hole that defeats the whole "backends have no public exposure" design. This is also why real load-balanced deployments almost always sit behind a NAT gateway: it is the clean, subnet-wide way to give private backends outbound without exposing them.
+
+Now, a small change to the cloud-init file so each VM's page identifies itself — useful for proving the load balancer is really splitting traffic:
 
 ```bash
 cd ~/network-lab
@@ -572,7 +599,7 @@ Verify:
 az group list --output table
 ```
 
-**What is being torn down?** Run `az resource list --resource-group rg-network-<yourinitials> --output table` before the delete finishes and count: three VMs, three disks, three NICs, two public IPs, two NSGs, an ASG, a load balancer, and the VNet — sixteen or so resources from one lab, several of them (the load balancer, the ASG membership) depending on others existing first. This is why the lifecycle habit matters: nobody wants to hand-delete sixteen interdependent resources in the right order. The group does it for you, in one call, regardless of what depends on what.
+**What is being torn down?** Run `az resource list --resource-group rg-network-<yourinitials> --output table` before the delete finishes and count: three VMs, three disks, three NICs, three public IPs, two NSGs, an ASG, a load balancer, a NAT gateway, and the VNet — eighteen or so resources from one lab, several of them (the load balancer, the NAT gateway, the ASG membership) depending on others existing first. This is why the lifecycle habit matters: nobody wants to hand-delete eighteen interdependent resources in the right order. The group does it for you, in one call, regardless of what depends on what.
 
 ---
 
