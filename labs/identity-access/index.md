@@ -140,7 +140,7 @@ Put the database connection string into the vault, then read it back:
 az keyvault secret set \
   --vault-name kv-catalog-<yourinitials> \
   --name CatalogDbConnection \
-  --value "Server=tcp:sql-catalog-<yourinitials>.database.windows.net;Database=catalogdb;User ID=catalogadmin;Password=Cascade2026!example;Encrypt=true;"
+  --value 'Server=tcp:sql-catalog-<yourinitials>.database.windows.net;Database=catalogdb;User ID=catalogadmin;Password=Cascade2026!example;Encrypt=true;'
 
 az keyvault secret show \
   --vault-name kv-catalog-<yourinitials> \
