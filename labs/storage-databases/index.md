@@ -191,7 +191,7 @@ Run the queries in the portal's built-in editor — no client tool to install.
 1. In the portal, search for **SQL databases** and open **catalogdb**.
 2. In the left menu, open **Query editor (preview)**.
 3. Sign in with **SQL server authentication**: login `catalogadmin`, password the one you chose in Step 5.
-4. Paste and run this, then run the `SELECT`:
+4. Paste this into the editor and click **Run** to create the table and load three products:
 
 ```sql
 CREATE TABLE products (
@@ -205,7 +205,11 @@ INSERT INTO products (id, name, price, in_stock) VALUES
     (1, 'Trailhead 2-Person Tent', 249.99, 40),
     (2, 'Rapids Kayak',            589.00, 12),
     (3, 'Summit 45L Backpack',     139.50, 75);
+```
 
+5. Now clear the editor, paste just the query, and click **Run** again — this is the part that matters:
+
+```sql
 SELECT name, price FROM products WHERE in_stock > 20 ORDER BY price DESC;
 ```
 
